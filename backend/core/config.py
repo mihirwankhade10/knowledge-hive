@@ -1,0 +1,88 @@
+"""
+KnowledgeHive - Application Configuration
+
+Centralized settings loaded from environment variables via pydantic-settings.
+All configuration is validated at startup.
+"""
+
+from pydantic_settings import BaseSettings
+from pydantic import Field
+from functools import lru_cache
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+
+    # --- App ---
+    app_name: str = "KnowledgeHive"
+    app_version: str = "0.1.0"
+    debug: bool = False
+
+    # --- LLM Provider (OpenRouter) ---
+    openrouter_api_key: str = Field(default="", description="OpenRouter API key")
+    openrouter_model: str = Field(
+        default="google/gemini-2.0-flash-001",
+        description="OpenRouter model identifier",
+    )
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        description="OpenRouter API base URL",
+    )
+
+    # --- Embedding Model ---
+    embedding_model: str = Field(
+        default="all-MiniLM-L6-v2",
+        description="Sentence Transformers model name",
+    )
+
+    # --- Qdrant ---
+    qdrant_host: str = Field(default="localhost", description="Qdrant host")
+    qdrant_port: int = Field(default=6333, description="Qdrant port")
+    qdrant_collection: str = Field(
+        default="knowledge_hive", description="Qdrant collection name"
+    )
+
+    # --- Neo4j ---
+    neo4j_uri: str = Field(default="bolt://localhost:7687", description="Neo4j URI")
+    neo4j_user: str = Field(default="neo4j", description="Neo4j username")
+    neo4j_password: str = Field(default="knowledgehive", description="Neo4j password")
+
+    # --- Upload ---
+    upload_dir: str = Field(default="./uploads", description="Upload directory path")
+    max_file_size_mb: int = Field(default=50, description="Max upload file size in MB")
+
+    # --- Chunking ---
+    chunk_size: int = Field(default=512, description="Target chunk size in characters")
+    chunk_overlap: int = Field(default=50, description="Chunk overlap in characters")
+
+    # --- Server ---
+    backend_host: str = Field(default="0.0.0.0", description="Backend host")
+    backend_port: int = Field(default=8000, description="Backend port")
+
+    # --- Frontend ---
+    vite_api_url: str = Field(default="http://localhost:8000", description="Frontend API URL")
+
+    # --- Future: Redis ---
+    # redis_host: str = "localhost"
+    # redis_port: int = 6379
+
+    # --- Future: Celery ---
+    # celery_broker_url: str = "redis://localhost:6379/0"
+    # celery_result_backend: str = "redis://localhost:6379/1"
+
+    # --- Future: Langfuse ---
+    # langfuse_public_key: str = ""
+    # langfuse_secret_key: str = ""
+    # langfuse_host: str = "https://cloud.langfuse.com"
+
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": False,
+    }
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    """Cached settings instance - loaded once per process."""
+    return Settings()

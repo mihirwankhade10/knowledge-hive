@@ -1,0 +1,39 @@
+# =============================================================================
+# KnowledgeHive - Python Dependencies
+# =============================================================================
+
+# --- Web Framework ---
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-multipart>=0.0.6
+
+# --- HTTP Client (for OpenRouter API) ---
+httpx>=0.25.0
+
+# --- Async File I/O ---
+aiofiles>=23.2.0
+
+# --- Vector Database (Qdrant) ---
+qdrant-client>=1.7.0
+
+# --- Graph Database (Neo4j) ---
+neo4j>=5.14.0
+
+# --- Embeddings ---
+sentence-transformers>=2.2.0
+
+# --- Document Parsing ---
+PyPDF2>=3.0.0
+python-docx>=1.1.0
+
+# --- Testing ---
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+httpx>=0.25.0
+
+# --- Utilities ---
+python-dotenv>=1.0.0
+uuid6>=2024.1.12

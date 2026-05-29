@@ -1,0 +1,193 @@
+/**
+ * KnowledgeHive - UploadBox Component
+ *
+ * Drag-and-drop file upload with progress indication.
+ */
+import { useCallback, useState } from "react";
+import {
+  Box,
+  VStack,
+  Text,
+  Icon,
+  Progress,
+  Badge,
+  useToast,
+  HStack,
+  Spinner,
+} from "@chakra-ui/react";
+import { useDropzone } from "react-dropzone";
+import { FiUploadCloud, FiFile, FiCheckCircle, FiAlertCircle } from "react-icons/fi";
+import { uploadDocument } from "../services/api";
+
+const ACCEPTED_TYPES = {
+  "application/pdf": [".pdf"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+  "text/plain": [".txt"],
+};
+
+export default function UploadBox({ onUploadComplete }) {
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const toast = useToast();
+
+  const onDrop = useCallback(
+    async (acceptedFiles) => {
+      if (acceptedFiles.length === 0) return;
+
+      const file = acceptedFiles[0];
+      setUploading(true);
+      setResult(null);
+      setError(null);
+
+      try {
+        const data = await uploadDocument(file);
+        setResult(data);
+        toast({
+          title: "Upload Successful",
+          description: data.message || `${file.name} processed successfully`,
+          status: "success",
+          duration: 5000,
+          isClosable: true,
+        });
+        if (onUploadComplete) onUploadComplete(data);
+      } catch (err) {
+        const msg = err.response?.data?.detail || err.message || "Upload failed";
+        setError(msg);
+        toast({
+          title: "Upload Failed",
+          description: msg,
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+      } finally {
+        setUploading(false);
+      }
+    },
+    [toast, onUploadComplete]
+  );
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: ACCEPTED_TYPES,
+    maxFiles: 1,
+    disabled: uploading,
+  });
+
+  return (
+    <Box w="100%">
+      <Box
+        {...getRootProps()}
+        p={8}
+        borderRadius="xl"
+        border="2px dashed"
+        borderColor={
+          isDragActive ? "brand.400" : uploading ? "hive.border" : "hive.border"
+        }
+        bg={isDragActive ? "hive.accentGlow" : "hive.surface"}
+        cursor={uploading ? "not-allowed" : "pointer"}
+        transition="all 0.3s ease"
+        _hover={
+          !uploading
+            ? {
+                borderColor: "brand.500",
+                bg: "hive.accentGlow",
+                transform: "translateY(-2px)",
+                boxShadow: "0 8px 30px rgba(255, 179, 0, 0.1)",
+              }
+            : {}
+        }
+      >
+        <input {...getInputProps()} />
+        <VStack spacing={3}>
+          {uploading ? (
+            <>
+              <Spinner size="lg" color="brand.400" thickness="3px" />
+              <Text color="brand.400" fontWeight="500">
+                Processing document...
+              </Text>
+              <Progress
+                size="xs"
+                isIndeterminate
+                colorScheme="yellow"
+                w="200px"
+                borderRadius="full"
+              />
+            </>
+          ) : (
+            <>
+              <Icon
+                as={FiUploadCloud}
+                boxSize={10}
+                color={isDragActive ? "brand.400" : "hive.textMuted"}
+                transition="all 0.2s"
+              />
+              <Text
+                fontSize="md"
+                fontWeight="500"
+                color={isDragActive ? "brand.400" : "hive.text"}
+              >
+                {isDragActive
+                  ? "Drop your file here"
+                  : "Drag & drop a document, or click to browse"}
+              </Text>
+              <HStack spacing={2}>
+                <Badge colorScheme="yellow" variant="subtle">PDF</Badge>
+                <Badge colorScheme="blue" variant="subtle">DOCX</Badge>
+                <Badge colorScheme="green" variant="subtle">TXT</Badge>
+              </HStack>
+              <Text fontSize="xs" color="hive.textMuted">
+                Max file size: 50MB
+              </Text>
+            </>
+          )}
+        </VStack>
+      </Box>
+
+      {/* Result display */}
+      {result && (
+        <Box
+          mt={4}
+          p={4}
+          borderRadius="lg"
+          bg="rgba(74, 222, 128, 0.08)"
+          border="1px solid"
+          borderColor="green.800"
+        >
+          <HStack spacing={2} mb={2}>
+            <FiCheckCircle color="var(--chakra-colors-green-400)" />
+            <Text fontWeight="600" color="green.300">
+              Processing Complete
+            </Text>
+          </HStack>
+          <VStack align="start" spacing={1} fontSize="sm" color="hive.textMuted">
+            <Text>📄 {result.filename}</Text>
+            <Text>📦 {result.chunks_created} chunks created</Text>
+            <Text>🔗 {result.entities_created} entities extracted</Text>
+            <Text>🕸️ {result.relationships_created} relationships found</Text>
+          </VStack>
+        </Box>
+      )}
+
+      {/* Error display */}
+      {error && (
+        <Box
+          mt={4}
+          p={4}
+          borderRadius="lg"
+          bg="rgba(248, 113, 113, 0.08)"
+          border="1px solid"
+          borderColor="red.800"
+        >
+          <HStack spacing={2}>
+            <FiAlertCircle color="var(--chakra-colors-red-400)" />
+            <Text fontWeight="600" color="red.300">
+              {error}
+            </Text>
+          </HStack>
+        </Box>
+      )}
+    </Box>
+  );
+}

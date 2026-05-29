@@ -1,0 +1,109 @@
+version: "3.8"
+
+# =============================================================================
+# KnowledgeHive - Docker Compose
+# =============================================================================
+
+services:
+  # --- Backend (FastAPI) ---
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app/backend
+      - ./uploads:/app/uploads
+    depends_on:
+      qdrant:
+        condition: service_started
+      neo4j:
+        condition: service_healthy
+    networks:
+      - knowledgehive
+
+  # --- Frontend (Vite + React) ---
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - knowledgehive
+
+  # --- Qdrant Vector Database ---
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - knowledgehive
+
+  # --- Neo4j Graph Database ---
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/knowledgehive
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      - NEO4J_PLUGINS=["apoc"]
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - knowledgehive
+
+  # --- Redis (Phase 3 - uncomment when needed) ---
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - knowledgehive
+
+  # --- Celery Worker (Phase 3 - uncomment when needed) ---
+  # celery_worker:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/backend.Dockerfile
+  #   command: celery -A backend.worker worker --loglevel=info
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - redis
+  #     - backend
+  #   networks:
+  #     - knowledgehive
+
+volumes:
+  qdrant_data:
+  neo4j_data:
+  neo4j_logs:
+  # redis_data:
+
+networks:
+  knowledgehive:
+    driver: bridge
