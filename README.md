@@ -175,13 +175,64 @@ knowledge-hive/
 └── .env.example
 ```
 
-## 📈 Roadmap
+## 🏗️ Architecture Decisions
 
-- [x] **Phase 1**: Working MVP (upload, query, agent flow)
-- [ ] **Phase 2**: Architecture hardening (logging, error handling)
-- [ ] **Phase 3**: Scalability (Redis, Celery, background jobs)
-- [ ] **Phase 4**: Observability (Langfuse, metrics, tracing)
-- [ ] **Phase 5**: Production (K8s, horizontal scaling)
+To ensure all team members align on the design, here are the core architecture decisions:
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| **Agent pattern** | Custom Python classes with `BaseAgent` ABC | Simple, testable, easy to swap for AutoGen/LangGraph later |
+| **LLM abstraction** | `LLMProvider` protocol + `OpenRouterProvider` | Provider pattern allows swapping OpenAI/Azure later |
+| **Embedding abstraction** | `EmbeddingProvider` protocol + `SentenceTransformerProvider` | Same pattern, locally run for MVP |
+| **Vector store abstraction** | `VectorStore` protocol + `QdrantVectorStore` | Qdrant via `qdrant-client` |
+| **Graph store abstraction** | `GraphStore` protocol + `Neo4jGraphStore` | Neo4j via `neo4j` driver |
+| **Dependency injection** | FastAPI `Depends()` + `dependencies.py` | Lightweight, framework-native |
+| **Async** | Full async FastAPI, Qdrant client, Neo4j driver | Production-ready from day one |
+| **Frontend state** | TanStack Query for server state, React Context for UI state | Industry standard, minimal boilerplate |
+| **Chunking** | Recursive text splitter (custom) | No heavy LangChain dependency in MVP |
+
+## 📈 Detailed Implementation Plan & Roadmap
+
+This project is built in phases to ensure a stable, scalable architecture. Below is the detailed implementation plan so all team members can follow the agreed-upon structure.
+
+### Phase 1: Working MVP (✅ Completed)
+The foundation of the KnowledgeHive swarm.
+- [x] **Project Setup**: Git, Docker (`docker-compose.yml`, multi-stage Dockerfiles), Environment Variables, and `requirements.txt`.
+- [x] **Backend Core**: FastAPI app with CORS, DI `dependencies.py`, and Pydantic `config.py`.
+- [x] **Backend Models & Utils**: Document & Query schemas, Recursive text chunker (512 tokens), PDF/DOCX parsers.
+- [x] **Backend Services**: LLM (`OpenRouterProvider`), Embeddings (`SentenceTransformerProvider`), Qdrant VectorStore, Neo4j GraphStore.
+- [x] **Agent Swarm Implementation**: 
+  - `IngestionAgent`: Parse -> Chunk -> Embed -> Qdrant
+  - `GraphAgent`: Extract Entities/Relationships -> Neo4j
+  - `RetrievalAgent`: Vector Search + Graph Traversal
+  - `ValidationAgent`: LLM Relevance Scoring
+  - `ResponseAgent`: Answer Generation with Citations
+- [x] **API Routes**: `/api/upload`, `/api/query`, `/api/health`
+- [x] **Frontend MVP**: Vite + React + Chakra UI setup. Created Dashboard (stats, upload), Chat (answers, citations), and AgentFlow (visual pipeline).
+- [x] **Tests**: Pytest suite for parsers, chunking, agents, and API endpoints.
+
+### Phase 2: Architecture Hardening (🚧 Next Up)
+- [ ] Centralized structured logging (e.g., Loguru or structured JSON logs)
+- [ ] Global exception handlers in FastAPI for standardized error responses
+- [ ] Input validation hardening (file size limits, mime-type verification)
+- [ ] Rate limiting on API endpoints
+- [ ] Basic Authentication/Authorization layer
+
+### Phase 3: Scalability
+- [ ] Introduce Redis for caching LLM responses and intermediate agent states
+- [ ] Introduce Celery/RabbitMQ for background document ingestion (decoupling from HTTP request)
+- [ ] Async WebSocket for real-time Agent Status updates (replacing polling)
+
+### Phase 4: Observability
+- [ ] Integrate Langfuse for LLM prompt tracing and cost monitoring
+- [ ] Export Prometheus metrics (Qdrant/Neo4j query times, Agent durations)
+- [ ] OpenTelemetry for distributed tracing across the backend
+
+### Phase 5: Production
+- [ ] Kubernetes (K8s) deployment manifests (Deployments, Services, Ingress)
+- [ ] Horizontal Pod Autoscaling (HPA) for backend API and Celery workers
+- [ ] Migration from local SentenceTransformers to a dedicated Embedding API (or Triton Inference Server)
+- [ ] CI/CD pipelines (GitHub Actions) for automated testing and Docker publishing
 
 ## 📄 License
 
