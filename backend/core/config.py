@@ -55,6 +55,16 @@ class Settings(BaseSettings):
     chunk_size: int = Field(default=512, description="Target chunk size in characters")
     chunk_overlap: int = Field(default=50, description="Chunk overlap in characters")
 
+    # --- Authentication (Phase 2) ---
+    api_key: str = Field(
+        default="", description="API key for protected endpoints. Empty = auth disabled."
+    )
+
+    # --- Rate Limiting (Phase 2) ---
+    rate_limit_upload: str = Field(default="10/minute", description="Rate limit for upload endpoint")
+    rate_limit_query: str = Field(default="30/minute", description="Rate limit for query endpoint")
+    rate_limit_health: str = Field(default="60/minute", description="Rate limit for health endpoints")
+
     # --- Server ---
     backend_host: str = Field(default="0.0.0.0", description="Backend host")
     backend_port: int = Field(default=8000, description="Backend port")

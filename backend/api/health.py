@@ -6,7 +6,8 @@ Provides health status for the backend and its dependencies.
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from backend.core.rate_limit import limiter
 
 from backend.core.dependencies import get_vector_store, get_graph_store
 from backend.models.query import HealthResponse
@@ -18,7 +19,8 @@ router = APIRouter()
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check():
+@limiter.limit("60/minute")
+async def health_check(request: Request):
     """Check health of backend and all connected services."""
     qdrant_status = "unhealthy"
     neo4j_status = "unhealthy"
@@ -49,7 +51,8 @@ async def health_check():
 
 
 @router.get("/stats", response_model=DocumentStats)
-async def get_stats():
+@limiter.limit("60/minute")
+async def get_stats(request: Request):
     """Get knowledge base statistics."""
     try:
         vector_store = get_vector_store()

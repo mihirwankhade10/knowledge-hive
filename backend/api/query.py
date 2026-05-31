@@ -3,12 +3,17 @@ KnowledgeHive - Query API
 
 Handles user questions by orchestrating the Retrieval, Validation,
 and Response agents in sequence.
+
+Phase 2: Custom exceptions, input sanitization, rate limiting,
+         and API-key authentication.
 """
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, Request
 
+from backend.core.auth import require_api_key
+from backend.core.rate_limit import limiter
 from backend.core.dependencies import (
     get_retrieval_agent,
     get_validation_agent,
@@ -28,7 +33,12 @@ router = APIRouter()
 
 
 @router.post("/query", response_model=QueryResponse)
-async def query_knowledge(request: QueryRequest):
+@limiter.limit("30/minute")
+async def query_knowledge(
+    request: Request,
+    body: QueryRequest,
+    _api_key: str = Depends(require_api_key),
+):
     """
     Ask a question against the knowledge base.
 
@@ -37,7 +47,8 @@ async def query_knowledge(request: QueryRequest):
     2. Validation Agent: Score relevance → rank sources → confidence
     3. Response Agent: Generate answer with citations
     """
-    question = request.question
+    # Sanitize input (strip excessive whitespace)
+    question = " ".join(body.question.split())
     logger.info(f"Query received: {question[:80]}...")
 
     agent_flow: list[AgentStep] = []

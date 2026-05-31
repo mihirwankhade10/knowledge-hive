@@ -47,7 +47,7 @@ class TestUploadEndpoint:
             files={"file": ("test.xyz", io.BytesIO(file_content), "application/octet-stream")},
         )
         assert response.status_code == 400
-        assert "Unsupported" in response.json()["detail"]
+        assert "Unsupported" in response.json()["message"]
 
     def test_upload_accepts_txt(self, client):
         """Should accept TXT files (mocked pipeline)."""
