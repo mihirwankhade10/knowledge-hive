@@ -2,6 +2,7 @@ version: "3.8"
 
 # =============================================================================
 # KnowledgeHive - Docker Compose
+# Phase 3: Redis + Celery worker activated
 # =============================================================================
 
 services:
@@ -21,6 +22,8 @@ services:
       qdrant:
         condition: service_started
       neo4j:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - knowledgehive
@@ -74,35 +77,48 @@ services:
     networks:
       - knowledgehive
 
-  # --- Redis (Phase 3 - uncomment when needed) ---
-  # redis:
-  #   image: redis:7-alpine
-  #   ports:
-  #     - "6379:6379"
-  #   volumes:
-  #     - redis_data:/data
-  #   networks:
-  #     - knowledgehive
+  # --- Redis (Phase 3: Caching + Celery Broker + Pub/Sub) ---
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - knowledgehive
 
-  # --- Celery Worker (Phase 3 - uncomment when needed) ---
-  # celery_worker:
-  #   build:
-  #     context: .
-  #     dockerfile: docker/backend.Dockerfile
-  #   command: celery -A backend.worker worker --loglevel=info
-  #   env_file:
-  #     - .env
-  #   depends_on:
-  #     - redis
-  #     - backend
-  #   networks:
-  #     - knowledgehive
+  # --- Celery Worker (Phase 3: Background Document Ingestion) ---
+  celery_worker:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    command: celery -A backend.worker.celery_app worker --loglevel=info --concurrency=2
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app/backend
+      - ./uploads:/app/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      neo4j:
+        condition: service_healthy
+    networks:
+      - knowledgehive
 
 volumes:
   qdrant_data:
   neo4j_data:
   neo4j_logs:
-  # redis_data:
+  redis_data:
 
 networks:
   knowledgehive:

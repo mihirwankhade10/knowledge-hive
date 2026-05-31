@@ -1,0 +1,1 @@
+Machine learning is a subset of artificial intelligence. It focuses on building systems that learn from data. Neural networks are a key technology in modern ML.

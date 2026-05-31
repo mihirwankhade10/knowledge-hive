@@ -57,4 +57,5 @@ class HealthResponse(BaseModel):
     status: str = "healthy"
     qdrant: str = "unknown"
     neo4j: str = "unknown"
+    redis: str = "unknown"
     version: str = "0.1.0"

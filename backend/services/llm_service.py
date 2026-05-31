@@ -3,13 +3,18 @@ KnowledgeHive - LLM Service
 
 Abstracted LLM provider with OpenRouter implementation.
 Protocol-based design allows swapping providers (Azure OpenAI, OpenAI, etc.)
+
+Phase 3: Added optional CacheManager integration for caching LLM responses.
 """
 
 import json
 import logging
-from typing import Protocol, Optional
+from typing import Protocol, Optional, TYPE_CHECKING
 
 import httpx
+
+if TYPE_CHECKING:
+    from backend.services.cache import CacheManager
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +34,20 @@ class LLMProvider(Protocol):
 
 
 class OpenRouterProvider:
-    """LLM provider using OpenRouter API."""
+    """LLM provider using OpenRouter API, with optional Redis caching."""
 
-    def __init__(self, api_key: str, model: str, base_url: str):
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        base_url: str,
+        cache_manager: Optional["CacheManager"] = None,
+    ):
         self.api_key = api_key
         self.model = model
         self.base_url = base_url.rstrip("/")
         self._client: Optional[httpx.AsyncClient] = None
+        self._cache = cache_manager
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -57,7 +69,28 @@ class OpenRouterProvider:
         temperature: float = 0.3,
         max_tokens: int = 2000,
     ) -> str:
-        """Generate a response via OpenRouter API."""
+        """
+        Generate a response via OpenRouter API.
+
+        If a CacheManager is configured, identical prompts will return
+        cached responses instead of making an API call (saves cost + time).
+        Caching is skipped for non-deterministic calls (temperature > 0.5).
+        """
+        use_cache = self._cache is not None and temperature <= 0.5
+
+        # --- Check cache ---
+        cache_key = None
+        if use_cache:
+            cache_key = self._cache.make_llm_key(prompt, system_prompt, self.model)
+            try:
+                cached = await self._cache.get_cached_llm_response(cache_key)
+                if cached is not None:
+                    logger.info("LLM cache HIT — returning cached response")
+                    return cached
+            except Exception as e:
+                logger.warning(f"Cache read failed (proceeding without cache): {e}")
+
+        # --- Call OpenRouter API ---
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -79,7 +112,17 @@ class OpenRouterProvider:
             )
             response.raise_for_status()
             data = response.json()
-            return data["choices"][0]["message"]["content"]
+            result = data["choices"][0]["message"]["content"]
+
+            # --- Store in cache ---
+            if use_cache and cache_key:
+                try:
+                    await self._cache.cache_llm_response(cache_key, result)
+                    logger.info("LLM cache MISS — response cached for next time")
+                except Exception as e:
+                    logger.warning(f"Cache write failed (non-critical): {e}")
+
+            return result
         except httpx.HTTPStatusError as e:
             logger.error(f"OpenRouter API error: {e.response.status_code} - {e.response.text}")
             raise RuntimeError(f"LLM API error: {e.response.status_code}") from e

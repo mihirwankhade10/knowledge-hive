@@ -2,6 +2,8 @@
 KnowledgeHive - Health Check API
 
 Provides health status for the backend and its dependencies.
+
+Phase 3: Added Redis health check.
 """
 
 import logging
@@ -9,7 +11,7 @@ import logging
 from fastapi import APIRouter, Request
 from backend.core.rate_limit import limiter
 
-from backend.core.dependencies import get_vector_store, get_graph_store
+from backend.core.dependencies import get_vector_store, get_graph_store, get_redis_service
 from backend.models.query import HealthResponse
 from backend.models.document import DocumentStats
 
@@ -24,6 +26,7 @@ async def health_check(request: Request):
     """Check health of backend and all connected services."""
     qdrant_status = "unhealthy"
     neo4j_status = "unhealthy"
+    redis_status = "unhealthy"
 
     # Check Qdrant
     try:
@@ -41,12 +44,25 @@ async def health_check(request: Request):
     except Exception as e:
         logger.warning(f"Neo4j health check failed: {e}")
 
-    overall = "healthy" if qdrant_status == "healthy" and neo4j_status == "healthy" else "degraded"
+    # Check Redis
+    try:
+        redis_service = get_redis_service()
+        is_up = await redis_service.ping()
+        redis_status = "healthy" if is_up else "unhealthy"
+    except Exception as e:
+        logger.warning(f"Redis health check failed: {e}")
+
+    overall = (
+        "healthy"
+        if all(s == "healthy" for s in [qdrant_status, neo4j_status, redis_status])
+        else "degraded"
+    )
 
     return HealthResponse(
         status=overall,
         qdrant=qdrant_status,
         neo4j=neo4j_status,
+        redis=redis_status,
     )
 
 

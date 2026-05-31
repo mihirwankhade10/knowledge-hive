@@ -4,8 +4,8 @@ KnowledgeHive - Query API
 Handles user questions by orchestrating the Retrieval, Validation,
 and Response agents in sequence.
 
-Phase 2: Custom exceptions, input sanitization, rate limiting,
-         and API-key authentication.
+Phase 3: Added Redis caching for query results. Identical questions
+return cached responses instantly.
 """
 
 import logging
@@ -18,6 +18,7 @@ from backend.core.dependencies import (
     get_retrieval_agent,
     get_validation_agent,
     get_response_agent,
+    get_cache_manager,
 )
 from backend.models.query import (
     QueryRequest,
@@ -43,14 +44,36 @@ async def query_knowledge(
     Ask a question against the knowledge base.
 
     Pipeline:
-    1. Retrieval Agent: Embed query → search Qdrant → query Neo4j
-    2. Validation Agent: Score relevance → rank sources → confidence
-    3. Response Agent: Generate answer with citations
+    1. Check cache for identical query
+    2. Retrieval Agent: Embed query → search Qdrant → query Neo4j
+    3. Validation Agent: Score relevance → rank sources → confidence
+    4. Response Agent: Generate answer with citations
+    5. Cache the result for future identical queries
     """
     # Sanitize input (strip excessive whitespace)
     question = " ".join(body.question.split())
     logger.info(f"Query received: {question[:80]}...")
 
+    # --- Check cache ---
+    cache_manager = get_cache_manager()
+    query_cache_key = cache_manager.make_query_key(question)
+
+    try:
+        cached = await cache_manager.get_cached_query_result(query_cache_key)
+        if cached:
+            logger.info("Query cache HIT — returning cached result")
+            return QueryResponse(
+                answer=cached["answer"],
+                sources=[Source(**s) for s in cached.get("sources", [])],
+                confidence=cached.get("confidence", 0.0),
+                agent_flow=[
+                    AgentStep(**step) for step in cached.get("agent_flow", [])
+                ],
+            )
+    except Exception as e:
+        logger.warning(f"Cache lookup failed (proceeding without cache): {e}")
+
+    # --- Run agent pipeline ---
     agent_flow: list[AgentStep] = []
 
     # --- Step 1: Retrieval Agent ---
@@ -131,6 +154,19 @@ async def query_knowledge(
         )
         for s in sources_data
     ]
+
+    # --- Cache the result ---
+    try:
+        cache_data = {
+            "answer": answer,
+            "sources": [s.model_dump() for s in sources],
+            "confidence": confidence,
+            "agent_flow": [step.model_dump() for step in agent_flow],
+        }
+        await cache_manager.cache_query_result(query_cache_key, cache_data)
+        logger.info("Query result cached for future identical queries")
+    except Exception as e:
+        logger.warning(f"Failed to cache query result (non-critical): {e}")
 
     return QueryResponse(
         answer=answer,

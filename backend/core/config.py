@@ -72,13 +72,21 @@ class Settings(BaseSettings):
     # --- Frontend ---
     vite_api_url: str = Field(default="http://localhost:8000", description="Frontend API URL")
 
-    # --- Future: Redis ---
-    # redis_host: str = "localhost"
-    # redis_port: int = 6379
+    # --- Redis (Phase 3) ---
+    redis_host: str = Field(default="localhost", description="Redis host")
+    redis_port: int = Field(default=6379, description="Redis port")
+    redis_db: int = Field(default=0, description="Redis database number")
+    redis_password: str = Field(default="", description="Redis password (empty = no auth)")
 
-    # --- Future: Celery ---
-    # celery_broker_url: str = "redis://localhost:6379/0"
-    # celery_result_backend: str = "redis://localhost:6379/1"
+    # --- Cache TTL (Phase 3) ---
+    cache_ttl_query: int = Field(default=3600, description="Query result cache TTL in seconds")
+    cache_ttl_llm: int = Field(default=3600, description="LLM response cache TTL in seconds")
+    cache_ttl_entities: int = Field(default=86400, description="Entity extraction cache TTL in seconds")
+
+    # --- Celery (Phase 3) ---
+    celery_broker_url: str = Field(default="redis://localhost:6379/0", description="Celery broker URL")
+    celery_result_backend: str = Field(default="redis://localhost:6379/1", description="Celery result backend URL")
+    celery_worker_concurrency: int = Field(default=2, description="Celery worker concurrency")
 
     # --- Future: Langfuse ---
     # langfuse_public_key: str = ""

@@ -1,11 +1,11 @@
 """
 KnowledgeHive - Upload API
 
-Handles document upload, parsing, embedding, and graph extraction.
-Orchestrates the Ingestion Agent and Graph Agent.
+Handles document upload and validation. Queues ingestion as a
+background Celery task instead of blocking the HTTP request.
 
-Phase 2: Custom exceptions, MIME validation, filename sanitization,
-         rate limiting, and API-key authentication.
+Phase 3: Async upload via Celery, task status polling endpoint,
+         plus a sync fallback for environments without Celery.
 """
 
 import os
@@ -14,10 +14,10 @@ import uuid
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, UploadFile, File, Depends, Request
+from fastapi import APIRouter, UploadFile, File, Depends, Request, Query
 
 from backend.core.config import get_settings, Settings
-from backend.core.dependencies import get_ingestion_agent, get_graph_agent
+from backend.core.dependencies import get_ingestion_agent, get_graph_agent, get_cache_manager
 from backend.core.auth import require_api_key
 from backend.core.rate_limit import limiter
 from backend.core.exceptions import (
@@ -58,29 +58,44 @@ def _sanitize_filename(filename: str) -> str:
     return name or "unnamed_file"
 
 
+def _is_celery_available() -> bool:
+    """Check if Celery workers are reachable (Redis broker is up)."""
+    try:
+        from backend.worker.celery_app import celery_app
+        # Quick ping to the broker
+        conn = celery_app.connection()
+        conn.ensure_connection(max_retries=1, timeout=2)
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
 # ---------------------------------------------------------------------------
-# Upload endpoint
+# Upload endpoint (Phase 3: async via Celery)
 # ---------------------------------------------------------------------------
 
-@router.post("/upload", response_model=UploadResponse)
+@router.post("/upload", status_code=202)
 @limiter.limit("10/minute")
 async def upload_document(
     request: Request,
     file: UploadFile = File(...),
     settings: Settings = Depends(get_settings),
     _api_key: str = Depends(require_api_key),
+    sync: bool = Query(False, description="Force synchronous processing (skip Celery)"),
 ):
     """
     Upload a document (PDF, DOCX, or TXT).
 
-    Pipeline:
-    1. Validate file type, MIME type, and size
-    2. Sanitize filename and save to upload directory
-    3. Run Ingestion Agent (parse → chunk → embed → store)
-    4. Run Graph Agent (extract entities → store relationships)
-    5. Return results
+    Phase 3 behavior:
+    - Returns 202 Accepted immediately with a task_id
+    - Actual ingestion happens in a Celery background worker
+    - Track progress via WebSocket: ws://host/ws/task/{task_id}
+    - Or poll via REST: GET /api/upload/status/{task_id}
+
+    Set ?sync=true to force synchronous processing (Phase 1/2 behavior).
     """
-    # --- Validation ---
+    # --- Validation (same as Phase 2) ---
 
     # 1. File extension
     raw_filename = file.filename or "unknown"
@@ -121,7 +136,32 @@ async def upload_document(
 
     logger.info(f"Saved upload: {filename} → {file_path}")
 
-    # --- Run Ingestion Agent ---
+    # --- Async processing via Celery (default) ---
+
+    if not sync and _is_celery_available():
+        from backend.worker.tasks import ingest_document_task
+
+        task = ingest_document_task.delay(
+            str(file_path),
+            document_id,
+            filename,
+        )
+
+        logger.info(f"Enqueued ingestion task: {task.id} for doc {document_id}")
+
+        return {
+            "task_id": task.id,
+            "document_id": document_id,
+            "filename": filename,
+            "status": "accepted",
+            "message": "Document queued for processing. Connect to WebSocket for progress.",
+            "ws_url": f"/ws/task/{task.id}",
+        }
+
+    # --- Sync fallback (Celery not available or ?sync=true) ---
+
+    logger.info("Processing upload synchronously (Celery not available or sync=true)")
+
     ingestion_agent = get_ingestion_agent()
     ingestion_result = await ingestion_agent.execute(
         {
@@ -134,7 +174,6 @@ async def upload_document(
     if ingestion_result.status == AgentStatus.FAILED:
         raise IngestionError(ingestion_result.error or "Unknown ingestion failure")
 
-    # --- Run Graph Agent ---
     graph_agent = get_graph_agent()
     graph_result = await graph_agent.execute(
         {
@@ -143,7 +182,6 @@ async def upload_document(
         }
     )
 
-    # --- Build response ---
     chunks_created = ingestion_result.output.get("chunk_count", 0)
     entities_created = graph_result.output.get("entity_count", 0)
     relationships_created = graph_result.output.get("relationship_count", 0)
@@ -161,3 +199,49 @@ async def upload_document(
             f"{relationships_created} relationships"
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Task status endpoint (REST fallback for non-WebSocket clients)
+# ---------------------------------------------------------------------------
+
+@router.get("/upload/status/{task_id}")
+@limiter.limit("60/minute")
+async def get_task_status(request: Request, task_id: str):
+    """
+    Check the status of a background ingestion task.
+
+    Returns the latest status from Redis (fast) and Celery result backend.
+    """
+    # Try Redis cache first (contains step-by-step progress)
+    try:
+        cache_manager = get_cache_manager()
+        cached_status = await cache_manager.get_task_status(task_id)
+        if cached_status:
+            return cached_status
+    except Exception as e:
+        logger.warning(f"Redis status lookup failed: {e}")
+
+    # Fall back to Celery result backend
+    try:
+        from backend.worker.celery_app import celery_app
+        from celery.result import AsyncResult
+
+        result = AsyncResult(task_id, app=celery_app)
+        response = {
+            "task_id": task_id,
+            "status": result.status,
+            "progress": 100 if result.ready() else 0,
+        }
+        if result.ready():
+            response["result"] = result.result
+        if result.failed():
+            response["error"] = str(result.result)
+        return response
+    except Exception as e:
+        logger.error(f"Task status lookup failed: {e}")
+        return {
+            "task_id": task_id,
+            "status": "UNKNOWN",
+            "message": "Could not determine task status",
+        }

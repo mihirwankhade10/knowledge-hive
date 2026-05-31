@@ -4,6 +4,7 @@ KnowledgeHive - FastAPI Application Entry Point
 Sets up the FastAPI app with CORS, routing, and lifecycle management.
 Phase 2: Adds structured logging, request middleware, global exception
 handlers, and rate limiting.
+Phase 3: Adds WebSocket router, Redis lifecycle, and Redis health check.
 """
 
 import logging
@@ -19,12 +20,13 @@ from backend.core.config import get_settings
 from backend.core.logging_config import setup_logging
 from backend.core.middleware import RequestIdMiddleware, RequestLoggingMiddleware
 from backend.core.exceptions import register_exception_handlers, RateLimitExceededError
-from backend.core.dependencies import shutdown_services
+from backend.core.dependencies import shutdown_services, get_redis_service
 from backend.core.rate_limit import limiter
 from backend.api import upload, query, health
+from backend.api import websocket as ws_api
 
 # ---------------------------------------------------------------------------
-# Rate limiter (in-memory; Phase 3 will switch to Redis backend)
+# Rate limiter (Redis-backed; Phase 3)
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
@@ -41,8 +43,22 @@ async def lifespan(app: FastAPI):
     logger.info(f"   Embedding Model: {settings.embedding_model}")
     logger.info(f"   Qdrant: {settings.qdrant_host}:{settings.qdrant_port}")
     logger.info(f"   Neo4j: {settings.neo4j_uri}")
+    logger.info(f"   Redis: {settings.redis_host}:{settings.redis_port}/{settings.redis_db}")
     logger.info(f"   Auth: {'ENABLED' if settings.api_key else 'DISABLED (no API_KEY set)'}")
     logger.info(f"   Rate Limits: upload={settings.rate_limit_upload}, query={settings.rate_limit_query}")
+    logger.info(f"   Cache TTL: query={settings.cache_ttl_query}s, llm={settings.cache_ttl_llm}s")
+
+    # Initialize Redis connection at startup
+    try:
+        redis_service = get_redis_service()
+        await redis_service.connect()
+        is_connected = await redis_service.ping()
+        if is_connected:
+            logger.info("   ✅ Redis connected successfully")
+        else:
+            logger.warning("   ⚠️ Redis ping failed — caching/WS may not work")
+    except Exception as e:
+        logger.warning(f"   ⚠️ Redis connection failed: {e} — running without cache")
 
     yield
 
@@ -112,6 +128,9 @@ def create_app() -> FastAPI:
     app.include_router(upload.router, prefix="/api", tags=["Upload"])
     app.include_router(query.router, prefix="/api", tags=["Query"])
     app.include_router(health.router, prefix="/api", tags=["Health"])
+
+    # 8. Mount WebSocket router (Phase 3)
+    app.include_router(ws_api.router, tags=["WebSocket"])
 
     return app
 

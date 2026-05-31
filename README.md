@@ -141,13 +141,16 @@ python -m pytest tests/backend/ -v --cov=backend --cov-report=term
 ## 🛠️ Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
+|-------|-----------:|
 | **Backend** | FastAPI, Pydantic, Uvicorn |
 | **Frontend** | React, Vite, Chakra UI |
 | **LLM** | OpenRouter (Azure OpenAI/OpenAI ready) |
 | **Embeddings** | Sentence Transformers |
 | **Vector DB** | Qdrant |
 | **Graph DB** | Neo4j Community |
+| **Cache** | Redis 7 |
+| **Task Queue** | Celery + Redis |
+| **Real-time** | WebSocket (FastAPI native) |
 | **Containerization** | Docker, Docker Compose |
 
 ## 📋 Project Structure
@@ -211,17 +214,21 @@ The foundation of the KnowledgeHive swarm.
 - [x] **Frontend MVP**: Vite + React + Chakra UI setup. Created Dashboard (stats, upload), Chat (answers, citations), and AgentFlow (visual pipeline).
 - [x] **Tests**: Pytest suite for parsers, chunking, agents, and API endpoints.
 
-### Phase 2: Architecture Hardening (🚧 Next Up)
-- [ ] Centralized structured logging (e.g., Loguru or structured JSON logs)
-- [ ] Global exception handlers in FastAPI for standardized error responses
-- [ ] Input validation hardening (file size limits, mime-type verification)
-- [ ] Rate limiting on API endpoints
-- [ ] Basic Authentication/Authorization layer
+### Phase 2: Architecture Hardening (✅ Completed)
+- [x] Centralized structured logging (JSON structured logs via python-json-logger)
+- [x] Global exception handlers in FastAPI for standardized error responses
+- [x] Input validation hardening (file size limits, MIME-type verification, filename sanitization)
+- [x] Rate limiting on API endpoints (slowapi)
+- [x] Basic Authentication/Authorization layer (API key)
 
-### Phase 3: Scalability
-- [ ] Introduce Redis for caching LLM responses and intermediate agent states
-- [ ] Introduce Celery/RabbitMQ for background document ingestion (decoupling from HTTP request)
-- [ ] Async WebSocket for real-time Agent Status updates (replacing polling)
+### Phase 3: Scalability (✅ Completed)
+- [x] Redis integration for caching LLM responses and query results (with configurable TTLs)
+- [x] Celery + Redis for background document ingestion (async upload with task tracking)
+- [x] WebSocket for real-time Agent Status updates (`/ws/task/{id}`, `/ws/query`)
+- [x] Redis-backed rate limiting (persists across restarts)
+- [x] Cache-aware LLM service (identical prompts return instantly)
+- [x] Frontend WebSocket integration (live upload progress, live agent step indicators)
+- [x] Graceful fallback to synchronous mode when Celery is unavailable
 
 ### Phase 4: Observability
 - [ ] Integrate Langfuse for LLM prompt tracing and cost monitoring

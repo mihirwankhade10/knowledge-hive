@@ -77,7 +77,7 @@ class TestUploadEndpoint:
                 "/api/upload",
                 files={"file": ("test.txt", io.BytesIO(file_content), "text/plain")},
             )
-            assert response.status_code == 200
+            assert response.status_code == 202
             data = response.json()
             assert data["status"] == "success"
             assert "document_id" in data

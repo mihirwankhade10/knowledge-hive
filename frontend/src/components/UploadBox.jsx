@@ -1,23 +1,35 @@
 /**
  * KnowledgeHive - UploadBox Component
  *
- * Drag-and-drop file upload with progress indication.
+ * Drag-and-drop file upload with real-time progress tracking via WebSocket.
+ *
+ * Phase 3: After uploading, connects to WebSocket for live ingestion progress
+ * instead of blocking on the HTTP response. Falls back to sync mode if Celery
+ * is unavailable.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import {
   Box,
   VStack,
   Text,
   Icon,
-  Progress,
   Badge,
   useToast,
   HStack,
   Spinner,
+  Progress,
 } from "@chakra-ui/react";
 import { useDropzone } from "react-dropzone";
-import { FiUploadCloud, FiFile, FiCheckCircle, FiAlertCircle } from "react-icons/fi";
-import { uploadDocument } from "../services/api";
+import {
+  FiUploadCloud,
+  FiFile,
+  FiCheckCircle,
+  FiAlertCircle,
+  FiDatabase,
+  FiGitBranch,
+  FiCpu,
+} from "react-icons/fi";
+import { uploadDocument, subscribeToTaskProgress } from "../services/api";
 
 const ACCEPTED_TYPES = {
   "application/pdf": [".pdf"],
@@ -25,11 +37,33 @@ const ACCEPTED_TYPES = {
   "text/plain": [".txt"],
 };
 
+// Step display config
+const STEP_CONFIG = {
+  ingestion: { label: "Parsing & Embedding", icon: FiDatabase, color: "blue" },
+  ingestion_complete: { label: "Chunks Created", icon: FiDatabase, color: "blue" },
+  graph: { label: "Extracting Knowledge Graph", icon: FiGitBranch, color: "purple" },
+  graph_complete: { label: "Graph Built", icon: FiGitBranch, color: "purple" },
+  done: { label: "Complete", icon: FiCheckCircle, color: "green" },
+};
+
 export default function UploadBox({ onUploadComplete }) {
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [progress, setProgress] = useState(0);
+  const [currentStep, setCurrentStep] = useState(null);
+  const [stepMessage, setStepMessage] = useState("");
+  const wsRef = useRef(null);
   const toast = useToast();
+
+  // Cleanup WebSocket on unmount
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
 
   const onDrop = useCallback(
     async (acceptedFiles) => {
@@ -39,21 +73,83 @@ export default function UploadBox({ onUploadComplete }) {
       setUploading(true);
       setResult(null);
       setError(null);
+      setProgress(0);
+      setCurrentStep(null);
+      setStepMessage("Uploading file...");
 
       try {
         const data = await uploadDocument(file);
-        setResult(data);
-        toast({
-          title: "Upload Successful",
-          description: data.message || `${file.name} processed successfully`,
-          status: "success",
-          duration: 5000,
-          isClosable: true,
-        });
-        if (onUploadComplete) onUploadComplete(data);
+
+        // Phase 3: async upload — connect to WebSocket for progress
+        if (data.task_id && data.status === "accepted") {
+          setStepMessage("File accepted. Starting processing...");
+          setProgress(5);
+
+          const { ws } = subscribeToTaskProgress(
+            data.task_id,
+            // onProgress
+            (update) => {
+              setProgress(update.progress || 0);
+              setCurrentStep(update.step || null);
+              setStepMessage(update.message || "Processing...");
+            },
+            // onComplete
+            (completeData) => {
+              setResult({
+                filename: completeData.filename || file.name,
+                chunks_created: completeData.chunks_created || 0,
+                entities_created: completeData.entities_created || 0,
+                relationships_created: completeData.relationships_created || 0,
+                message: completeData.message,
+                elapsed_seconds: completeData.elapsed_seconds,
+              });
+              setUploading(false);
+              setProgress(100);
+              setCurrentStep("done");
+              toast({
+                title: "Upload Successful",
+                description: completeData.message || `${file.name} processed successfully`,
+                status: "success",
+                duration: 5000,
+                isClosable: true,
+              });
+              if (onUploadComplete) onUploadComplete(completeData);
+            },
+            // onError
+            (errData) => {
+              const msg = errData.error || errData.message || "Processing failed";
+              setError(msg);
+              setUploading(false);
+              setProgress(0);
+              toast({
+                title: "Processing Failed",
+                description: msg,
+                status: "error",
+                duration: 5000,
+                isClosable: true,
+              });
+            }
+          );
+          wsRef.current = ws;
+        } else {
+          // Sync mode fallback (Celery not available)
+          setResult(data);
+          setUploading(false);
+          setProgress(100);
+          toast({
+            title: "Upload Successful",
+            description: data.message || `${file.name} processed successfully`,
+            status: "success",
+            duration: 5000,
+            isClosable: true,
+          });
+          if (onUploadComplete) onUploadComplete(data);
+        }
       } catch (err) {
-        const msg = err.response?.data?.detail || err.message || "Upload failed";
+        const msg = err.response?.data?.message || err.response?.data?.detail || err.message || "Upload failed";
         setError(msg);
+        setUploading(false);
+        setProgress(0);
         toast({
           title: "Upload Failed",
           description: msg,
@@ -61,8 +157,6 @@ export default function UploadBox({ onUploadComplete }) {
           duration: 5000,
           isClosable: true,
         });
-      } finally {
-        setUploading(false);
       }
     },
     [toast, onUploadComplete]
@@ -103,17 +197,49 @@ export default function UploadBox({ onUploadComplete }) {
         <VStack spacing={3}>
           {uploading ? (
             <>
+              {/* Live Progress Display */}
               <Spinner size="lg" color="brand.400" thickness="3px" />
               <Text color="brand.400" fontWeight="500">
-                Processing document...
+                {stepMessage}
               </Text>
-              <Progress
-                size="xs"
-                isIndeterminate
-                colorScheme="yellow"
-                w="200px"
-                borderRadius="full"
-              />
+
+              {/* Step-by-step progress bar */}
+              <Box w="100%" maxW="320px">
+                <Progress
+                  value={progress}
+                  size="sm"
+                  colorScheme="yellow"
+                  borderRadius="full"
+                  hasStripe
+                  isAnimated
+                />
+                <Text
+                  fontSize="xs"
+                  color="hive.textMuted"
+                  mt={1}
+                  textAlign="center"
+                >
+                  {progress}%
+                </Text>
+              </Box>
+
+              {/* Active Step Badge */}
+              {currentStep && STEP_CONFIG[currentStep] && (
+                <HStack spacing={2}>
+                  <Icon
+                    as={STEP_CONFIG[currentStep].icon}
+                    color={`${STEP_CONFIG[currentStep].color}.400`}
+                    boxSize={4}
+                  />
+                  <Badge
+                    colorScheme={STEP_CONFIG[currentStep].color}
+                    variant="subtle"
+                    fontSize="xs"
+                  >
+                    {STEP_CONFIG[currentStep].label}
+                  </Badge>
+                </HStack>
+              )}
             </>
           ) : (
             <>
@@ -160,6 +286,11 @@ export default function UploadBox({ onUploadComplete }) {
             <Text fontWeight="600" color="green.300">
               Processing Complete
             </Text>
+            {result.elapsed_seconds && (
+              <Badge colorScheme="green" variant="outline" fontSize="xs">
+                {result.elapsed_seconds}s
+              </Badge>
+            )}
           </HStack>
           <VStack align="start" spacing={1} fontSize="sm" color="hive.textMuted">
             <Text>📄 {result.filename}</Text>

@@ -3,6 +3,8 @@ KnowledgeHive - Dependency Injection
 
 FastAPI dependency functions for providing services and agents.
 All services are created as singletons per application lifecycle.
+
+Phase 3: Added Redis, CacheManager, and cache-aware agent factories.
 """
 
 import logging
@@ -13,6 +15,8 @@ from backend.services.llm_service import OpenRouterProvider
 from backend.services.embedding_service import SentenceTransformerProvider
 from backend.services.qdrant_service import QdrantVectorStore
 from backend.services.neo4j_service import Neo4jGraphStore
+from backend.services.redis_service import RedisService
+from backend.services.cache import CacheManager
 from backend.agents.ingestion_agent import IngestionAgent
 from backend.agents.graph_agent import GraphAgent
 from backend.agents.retrieval_agent import RetrievalAgent
@@ -29,6 +33,8 @@ _llm_service = None
 _embedding_service = None
 _vector_store = None
 _graph_store = None
+_redis_service = None
+_cache_manager = None
 
 
 def get_llm_service() -> OpenRouterProvider:
@@ -40,6 +46,7 @@ def get_llm_service() -> OpenRouterProvider:
             api_key=settings.openrouter_api_key,
             model=settings.openrouter_model,
             base_url=settings.openrouter_base_url,
+            cache_manager=get_cache_manager(),
         )
     return _llm_service
 
@@ -79,6 +86,34 @@ def get_graph_store() -> Neo4jGraphStore:
             password=settings.neo4j_password,
         )
     return _graph_store
+
+
+def get_redis_service() -> RedisService:
+    """Get or create the Redis service singleton."""
+    global _redis_service
+    if _redis_service is None:
+        settings = get_settings()
+        _redis_service = RedisService(
+            host=settings.redis_host,
+            port=settings.redis_port,
+            db=settings.redis_db,
+            password=settings.redis_password,
+        )
+    return _redis_service
+
+
+def get_cache_manager() -> CacheManager:
+    """Get or create the CacheManager singleton."""
+    global _cache_manager
+    if _cache_manager is None:
+        settings = get_settings()
+        _cache_manager = CacheManager(
+            redis_service=get_redis_service(),
+            ttl_llm=settings.cache_ttl_llm,
+            ttl_query=settings.cache_ttl_query,
+            ttl_entities=settings.cache_ttl_entities,
+        )
+    return _cache_manager
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +164,7 @@ def get_response_agent() -> ResponseAgent:
 
 async def shutdown_services():
     """Clean up all service connections on shutdown."""
-    global _llm_service, _vector_store, _graph_store
+    global _llm_service, _vector_store, _graph_store, _redis_service
 
     if _llm_service:
         await _llm_service.close()
@@ -137,5 +172,7 @@ async def shutdown_services():
         await _vector_store.close()
     if _graph_store:
         await _graph_store.close()
+    if _redis_service:
+        await _redis_service.close()
 
     logger.info("All services shut down")

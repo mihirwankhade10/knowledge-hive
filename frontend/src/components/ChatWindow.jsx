@@ -1,9 +1,13 @@
 /**
  * KnowledgeHive - ChatWindow Component
  *
- * Chat interface with message bubbles, sources panel, and confidence display.
+ * Chat interface with message bubbles, sources panel, confidence display,
+ * and real-time agent step indicators via WebSocket.
+ *
+ * Phase 3: Uses WebSocket for live agent updates during queries,
+ * falls back to REST if WebSocket connection fails.
  */
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Box,
   VStack,
@@ -17,23 +21,52 @@ import {
   Collapse,
   Divider,
   Tooltip,
+  Progress,
 } from "@chakra-ui/react";
-import { FiSend, FiChevronDown, FiChevronUp, FiFileText } from "react-icons/fi";
-import { queryKnowledge } from "../services/api";
+import {
+  FiSend,
+  FiChevronDown,
+  FiChevronUp,
+  FiFileText,
+  FiCheckCircle,
+  FiLoader,
+  FiCircle,
+  FiZap,
+} from "react-icons/fi";
+import { queryKnowledge, queryKnowledgeWS } from "../services/api";
+
+// Agent display config
+const AGENT_LABELS = {
+  retrieval: { label: "Retrieval", icon: "🔍", color: "blue" },
+  validation: { label: "Validation", icon: "✅", color: "green" },
+  response: { label: "Response", icon: "💬", color: "purple" },
+  cache: { label: "Cache", icon: "⚡", color: "yellow" },
+};
 
 export default function ChatWindow() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [agentSteps, setAgentSteps] = useState([]);
   const messagesEndRef = useRef(null);
+  const wsRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  useEffect(scrollToBottom, [messages]);
+  useEffect(scrollToBottom, [messages, agentSteps]);
 
-  const handleSend = async () => {
+  // Cleanup WebSocket on unmount
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
+
+  const handleSend = useCallback(async () => {
     const question = input.trim();
     if (!question || loading) return;
 
@@ -41,32 +74,101 @@ export default function ChatWindow() {
     setMessages((prev) => [...prev, { type: "user", content: question }]);
     setInput("");
     setLoading(true);
+    setAgentSteps([]);
 
+    // Try WebSocket first for live updates
     try {
-      const data = await queryKnowledge(question);
-      setMessages((prev) => [
-        ...prev,
-        {
-          type: "assistant",
-          content: data.answer,
-          sources: data.sources || [],
-          confidence: data.confidence || 0,
-          agentFlow: data.agent_flow || [],
+      const { ws, close } = queryKnowledgeWS(
+        question,
+        // onAgentUpdate
+        (update) => {
+          setAgentSteps((prev) => {
+            const existing = prev.findIndex((s) => s.agent === update.agent);
+            if (existing >= 0) {
+              const updated = [...prev];
+              updated[existing] = { ...updated[existing], ...update };
+              return updated;
+            }
+            return [...prev, update];
+          });
         },
-      ]);
+        // onResult
+        (data) => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              type: "assistant",
+              content: data.answer,
+              sources: data.sources || [],
+              confidence: data.confidence || 0,
+              agentFlow: data.agent_flow || [],
+            },
+          ]);
+          setLoading(false);
+          setAgentSteps([]);
+        },
+        // onError — fallback to REST
+        async (err) => {
+          console.warn("WebSocket query failed, falling back to REST:", err);
+          try {
+            const data = await queryKnowledge(question);
+            setMessages((prev) => [
+              ...prev,
+              {
+                type: "assistant",
+                content: data.answer,
+                sources: data.sources || [],
+                confidence: data.confidence || 0,
+                agentFlow: data.agent_flow || [],
+              },
+            ]);
+          } catch (restErr) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                type: "error",
+                content:
+                  restErr.response?.data?.detail ||
+                  "Failed to get response. Please try again.",
+              },
+            ]);
+          } finally {
+            setLoading(false);
+            setAgentSteps([]);
+          }
+        }
+      );
+      wsRef.current = ws;
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          type: "error",
-          content:
-            err.response?.data?.detail || "Failed to get response. Please try again.",
-        },
-      ]);
-    } finally {
-      setLoading(false);
+      // If WebSocket constructor itself fails, use REST
+      try {
+        const data = await queryKnowledge(question);
+        setMessages((prev) => [
+          ...prev,
+          {
+            type: "assistant",
+            content: data.answer,
+            sources: data.sources || [],
+            confidence: data.confidence || 0,
+            agentFlow: data.agent_flow || [],
+          },
+        ]);
+      } catch (restErr) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            type: "error",
+            content:
+              restErr.response?.data?.detail ||
+              "Failed to get response. Please try again.",
+          },
+        ]);
+      } finally {
+        setLoading(false);
+        setAgentSteps([]);
+      }
     }
-  };
+  }, [input, loading]);
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -106,11 +208,18 @@ export default function ChatWindow() {
             {messages.map((msg, i) => (
               <MessageBubble key={i} message={msg} />
             ))}
-            {loading && (
+
+            {/* Live Agent Steps Indicator */}
+            {loading && agentSteps.length > 0 && (
+              <AgentStepIndicator steps={agentSteps} />
+            )}
+
+            {/* Fallback loading (no WS updates yet) */}
+            {loading && agentSteps.length === 0 && (
               <HStack spacing={3} p={4}>
                 <Spinner size="sm" color="brand.400" />
                 <Text fontSize="sm" color="hive.textMuted">
-                  Agents are working...
+                  Connecting to agent swarm...
                 </Text>
               </HStack>
             )}
@@ -154,6 +263,79 @@ export default function ChatWindow() {
         />
       </HStack>
     </Flex>
+  );
+}
+
+/**
+ * Live agent step indicator — shows real-time progress during queries
+ */
+function AgentStepIndicator({ steps }) {
+  const allAgents = ["retrieval", "validation", "response"];
+
+  return (
+    <Box
+      p={4}
+      borderRadius="lg"
+      bg="hive.card"
+      border="1px solid"
+      borderColor="hive.border"
+    >
+      <HStack spacing={2} mb={3}>
+        <FiZap color="var(--chakra-colors-brand-400)" />
+        <Text fontSize="sm" fontWeight="600" color="brand.400">
+          Agent Swarm Active
+        </Text>
+      </HStack>
+      <HStack spacing={4} flexWrap="wrap">
+        {allAgents.map((agentKey) => {
+          const step = steps.find((s) => s.agent === agentKey);
+          const config = AGENT_LABELS[agentKey] || {};
+          const status = step?.status || "pending";
+
+          return (
+            <HStack key={agentKey} spacing={2}>
+              {status === "running" ? (
+                <Spinner size="xs" color={`${config.color}.400`} />
+              ) : status === "completed" ? (
+                <FiCheckCircle color={`var(--chakra-colors-green-400)`} size={14} />
+              ) : (
+                <FiCircle color="var(--chakra-colors-whiteAlpha-300)" size={14} />
+              )}
+              <Text
+                fontSize="xs"
+                fontWeight="500"
+                color={
+                  status === "completed"
+                    ? "green.300"
+                    : status === "running"
+                    ? `${config.color}.300`
+                    : "hive.textMuted"
+                }
+              >
+                {config.icon} {config.label}
+              </Text>
+              {step?.duration_ms && (
+                <Badge
+                  fontSize="9px"
+                  variant="outline"
+                  colorScheme={config.color}
+                  borderRadius="sm"
+                >
+                  {step.duration_ms.toFixed(0)}ms
+                </Badge>
+              )}
+            </HStack>
+          );
+        })}
+      </HStack>
+
+      {/* Show latest message */}
+      {steps.length > 0 && steps[steps.length - 1]?.message && (
+        <Text fontSize="xs" color="hive.textMuted" mt={2}>
+          {steps[steps.length - 1].message}
+        </Text>
+      )}
+    </Box>
   );
 }
 
