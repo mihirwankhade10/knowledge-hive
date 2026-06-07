@@ -45,23 +45,42 @@ class RetrievalAgent(BaseAgent):
         question = context["question"]
 
         # Step 1: Embed the query
-        logger.info(f"[Retrieval] Embedding query: {question[:80]}...")
-        query_embeddings = await self.embedding_service.embed([question])
-        query_vector = query_embeddings[0]
+        try:
+            logger.info(f"[Retrieval] Embedding query: {question[:80]}...")
+            query_embeddings = await self.embedding_service.embed([question])
+            if not query_embeddings:
+                raise ValueError("Failed to generate query embedding")
+            query_vector = query_embeddings[0]
+        except Exception as e:
+            logger.error(f"[Retrieval] Embedding failed: {e}")
+            raise
 
-        # Step 2: Search Qdrant for similar chunks
-        logger.info(f"[Retrieval] Searching Qdrant (top_k={self.top_k})")
-        search_results = await self.vector_store.search(
-            query_vector=query_vector,
-            limit=self.top_k,
-        )
+        # Step 2: Initialize vector store if needed and search Qdrant
+        try:
+            logger.info(f"[Retrieval] Initializing vector store...")
+            dimension = self.embedding_service.get_dimension()
+            await self.vector_store.initialize(dimension)
+            
+            logger.info(f"[Retrieval] Searching Qdrant (top_k={self.top_k})")
+            search_results = await self.vector_store.search(
+                query_vector=query_vector,
+                limit=self.top_k,
+            )
+        except Exception as e:
+            logger.error(f"[Retrieval] Vector search failed: {e}")
+            # Return empty results instead of failing completely
+            search_results = []
 
         # Step 3: Extract key terms for graph search
         key_terms = self._extract_key_terms(question)
 
         # Step 4: Query Neo4j for related entities
-        logger.info(f"[Retrieval] Querying Neo4j for terms: {key_terms}")
-        graph_results = await self.graph_store.query_related(key_terms)
+        try:
+            logger.info(f"[Retrieval] Querying Neo4j for terms: {key_terms}")
+            graph_results = await self.graph_store.query_related(key_terms)
+        except Exception as e:
+            logger.warning(f"[Retrieval] Graph query failed: {e}")
+            graph_results = []
 
         # Step 5: Format results
         chunks = [
@@ -77,6 +96,10 @@ class RetrievalAgent(BaseAgent):
 
         # Format graph context
         graph_context = self._format_graph_context(graph_results)
+
+        # Check if we have any results
+        if not chunks and not graph_context:
+            logger.warning(f"[Retrieval] No results found for query: {question[:80]}...")
 
         return {
             "chunks": chunks,

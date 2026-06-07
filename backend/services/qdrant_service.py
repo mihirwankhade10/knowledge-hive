@@ -120,31 +120,43 @@ class QdrantVectorStore:
     ) -> list[dict]:
         """Search for similar vectors."""
         client = self._get_client()
+        
+        try:
+            # Check if collection exists
+            collections = client.get_collections().collections
+            existing = [c.name for c in collections]
+            
+            if self.collection_name not in existing:
+                logger.warning(f"Collection '{self.collection_name}' does not exist yet. No documents ingested.")
+                return []
 
-        qdrant_filter = None
-        if filter_conditions:
-            conditions = []
-            for key, value in filter_conditions.items():
-                conditions.append(
-                    FieldCondition(key=key, match=MatchValue(value=value))
-                )
-            qdrant_filter = Filter(must=conditions)
+            qdrant_filter = None
+            if filter_conditions:
+                conditions = []
+                for key, value in filter_conditions.items():
+                    conditions.append(
+                        FieldCondition(key=key, match=MatchValue(value=value))
+                    )
+                qdrant_filter = Filter(must=conditions)
 
-        results = client.query_points(
-            collection_name=self.collection_name,
-            query=query_vector,
-            limit=limit,
-            query_filter=qdrant_filter,
-        ).points
+            results = client.query_points(
+                collection_name=self.collection_name,
+                query=query_vector,
+                limit=limit,
+                query_filter=qdrant_filter,
+            ).points
 
-        return [
-            {
-                "id": str(hit.id),
-                "score": hit.score,
-                "payload": hit.payload,
-            }
-            for hit in results
-        ]
+            return [
+                {
+                    "id": str(hit.id),
+                    "score": hit.score,
+                    "payload": hit.payload,
+                }
+                for hit in results
+            ]
+        except Exception as e:
+            logger.error(f"Qdrant search failed: {e}")
+            return []
 
     async def get_collection_info(self) -> dict:
         """Get collection statistics."""

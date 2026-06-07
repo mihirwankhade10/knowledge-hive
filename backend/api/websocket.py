@@ -267,11 +267,14 @@ async def ws_query(websocket: WebSocket):
             "agent_flow": agent_flow,
         }
 
-        # Cache the result
-        try:
-            await cache_manager.cache_query_result(query_cache_key, final_result)
-        except Exception as e:
-            logger.warning(f"Failed to cache query result: {e}")
+        # Cache the result (only if successful — don't cache error responses)
+        if confidence > 0:
+            try:
+                await cache_manager.cache_query_result(query_cache_key, final_result)
+            except Exception as e:
+                logger.warning(f"Failed to cache query result: {e}")
+        else:
+            logger.info("Skipping cache — low/zero confidence, not caching error results")
 
         await websocket.send_json({
             "type": "result",

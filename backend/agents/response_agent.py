@@ -47,45 +47,62 @@ class ResponseAgent(BaseAgent):
                 "confidence": 0.0,
             }
 
-        # Format context for the LLM
-        context_text = "\n\n".join(
-            f"[Source {i+1} - {c.get('filename', 'unknown')}]:\n{c.get('content', '')}"
-            for i, c in enumerate(validated_chunks)
-        )
+        try:
+            # Format context for the LLM
+            context_text = "\n\n".join(
+                f"[Source {i+1} - {c.get('filename', 'unknown')}]:\n{c.get('content', '')}"
+                for i, c in enumerate(validated_chunks)
+            )
 
-        # Generate answer
-        logger.info(f"[Response] Generating answer for: {question[:80]}...")
-        prompt = ANSWER_GENERATION_PROMPT.format(
-            context=context_text,
-            graph_context=graph_context,
-            question=question,
-        )
+            # Generate answer
+            logger.info(f"[Response] Generating answer for: {question[:80]}...")
+            prompt = ANSWER_GENERATION_PROMPT.format(
+                context=context_text,
+                graph_context=graph_context,
+                question=question,
+            )
 
-        answer = await self.llm_service.generate(
-            prompt=prompt,
-            system_prompt=(
-                "You are KnowledgeHive, an enterprise knowledge assistant. "
-                "Provide accurate, well-cited answers based on the provided context."
-            ),
-            temperature=0.3,
-            max_tokens=2000,
-        )
+            answer = await self.llm_service.generate(
+                prompt=prompt,
+                system_prompt=(
+                    "You are KnowledgeHive, an enterprise knowledge assistant. "
+                    "Provide accurate, well-cited answers based on the provided context."
+                ),
+                temperature=0.3,
+                max_tokens=2000,
+            )
 
-        # Build source references
-        sources = [
-            {
-                "document_name": c.get("filename", "unknown"),
-                "chunk_text": c.get("content", "")[:300],
-                "relevance_score": c.get("relevance_score", 0.0),
+            # Build source references
+            sources = [
+                {
+                    "document_name": c.get("filename", "unknown"),
+                    "chunk_text": c.get("content", "")[:300],
+                    "relevance_score": c.get("relevance_score", 0.0),
+                }
+                for c in validated_chunks
+            ]
+
+            return {
+                "answer": answer.strip() if answer else "Unable to generate an answer.",
+                "sources": sources,
+                "confidence": confidence,
             }
-            for c in validated_chunks
-        ]
-
-        return {
-            "answer": answer.strip(),
-            "sources": sources,
-            "confidence": confidence,
-        }
+        except Exception as e:
+            logger.error(f"[Response] Answer generation failed: {e}")
+            # Return a response with available sources even if answer generation fails
+            sources = [
+                {
+                    "document_name": c.get("filename", "unknown"),
+                    "chunk_text": c.get("content", "")[:300],
+                    "relevance_score": c.get("relevance_score", 0.0),
+                }
+                for c in validated_chunks
+            ]
+            return {
+                "answer": f"I found relevant information but encountered an error while generating the response. Please try again. (Error: {str(e)[:100]})",
+                "sources": sources,
+                "confidence": 0.0,
+            }
 
     def _summarize(self, output: dict) -> str:
         answer_preview = output.get("answer", "")[:80]

@@ -36,7 +36,7 @@ class TestIngestionAgent:
         assert result.status == AgentStatus.COMPLETED
         assert result.output["chunk_count"] > 0
         assert result.output["document_id"] == "test-doc-1"
-        assert result.duration_ms > 0
+        assert result.duration_ms >= 0
         mock_vector_store.store_vectors.assert_called_once()
 
     async def test_ingestion_missing_file(

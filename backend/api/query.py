@@ -139,12 +139,23 @@ async def query_knowledge(
         )
     )
 
-    # Build final response
-    answer = response_result.output.get(
-        "answer", "I could not generate an answer. Please try again."
-    )
-    sources_data = response_result.output.get("sources", [])
-    confidence = response_result.output.get("confidence", 0.0)
+    # Build final response - handle failure gracefully
+    if response_result.status == AgentStatus.FAILED:
+        logger.error(f"Response Agent failed: {response_result.error}")
+        # Try to provide a useful fallback
+        validated_chunks = validation_result.output.get("validated_chunks", [])
+        if validated_chunks:
+            answer = f"I found relevant information but encountered an error generating a response. Error: {response_result.error}"
+        else:
+            answer = "I don't have enough information to answer this question. Please upload relevant documents first."
+        sources_data = []
+        confidence = 0.0
+    else:
+        answer = response_result.output.get(
+            "answer", "I could not generate an answer. Please try again."
+        )
+        sources_data = response_result.output.get("sources", [])
+        confidence = response_result.output.get("confidence", 0.0)
 
     sources = [
         Source(
@@ -155,18 +166,21 @@ async def query_knowledge(
         for s in sources_data
     ]
 
-    # --- Cache the result ---
-    try:
-        cache_data = {
-            "answer": answer,
-            "sources": [s.model_dump() for s in sources],
-            "confidence": confidence,
-            "agent_flow": [step.model_dump() for step in agent_flow],
-        }
-        await cache_manager.cache_query_result(query_cache_key, cache_data)
-        logger.info("Query result cached for future identical queries")
-    except Exception as e:
-        logger.warning(f"Failed to cache query result (non-critical): {e}")
+    # --- Cache the result (only if the response agent succeeded) ---
+    if response_result.status != AgentStatus.FAILED:
+        try:
+            cache_data = {
+                "answer": answer,
+                "sources": [s.model_dump() for s in sources],
+                "confidence": confidence,
+                "agent_flow": [step.model_dump() for step in agent_flow],
+            }
+            await cache_manager.cache_query_result(query_cache_key, cache_data)
+            logger.info("Query result cached for future identical queries")
+        except Exception as e:
+            logger.warning(f"Failed to cache query result (non-critical): {e}")
+    else:
+        logger.info("Skipping cache — response agent failed, not caching error results")
 
     return QueryResponse(
         answer=answer,

@@ -79,7 +79,7 @@ class TestUploadEndpoint:
             )
             assert response.status_code == 202
             data = response.json()
-            assert data["status"] == "success"
+            assert data["status"] == "accepted"
             assert "document_id" in data
 
 

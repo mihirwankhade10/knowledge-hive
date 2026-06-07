@@ -20,9 +20,10 @@ def setup_telemetry(app):
     provider = TracerProvider(resource=resource)
     
     # In a real production setup, use OTLPSpanExporter to send traces to Jaeger/Tempo
-    # For now, we will output traces to the console for demonstration
-    processor = BatchSpanProcessor(ConsoleSpanExporter())
-    provider.add_span_processor(processor)
+    # We comment this out to prevent OpenTelemetry from flooding your console with JSON traces.
+    # If you want to see console trace outputs, uncomment the lines below:
+    # processor = BatchSpanProcessor(ConsoleSpanExporter())
+    # provider.add_span_processor(processor)
     
     trace.set_tracer_provider(provider)
     
