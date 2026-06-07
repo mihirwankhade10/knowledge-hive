@@ -17,17 +17,19 @@ from backend.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# --- Configure Langfuse Context (Optional) ---
+# --- Configure Langfuse (Optional) ---
+_langfuse_enabled = False
 try:
-    from langfuse.decorators import langfuse_context
+    import os
+    from langfuse import Langfuse
     settings = get_settings()
     if settings.langfuse_public_key and settings.langfuse_secret_key:
-        langfuse_context.configure(
-            public_key=settings.langfuse_public_key,
-            secret_key=settings.langfuse_secret_key,
-            host=settings.langfuse_host,
-        )
-        logger.info("Langfuse tracing enabled and configured.")
+        # Set env vars so the Langfuse SDK auto-configures itself
+        os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
+        os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
+        os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
+        _langfuse_enabled = True
+        logger.info("Langfuse tracing enabled.")
     else:
         logger.info("Langfuse keys not found. Tracing disabled.")
 except ImportError:
@@ -82,11 +84,11 @@ class OpenRouterProvider:
             )
         return self._client
 
-    # If Langfuse is available, wrap with observe
+    # If Langfuse is available, wrap with @observe
     try:
-        from langfuse.decorators import observe
+        from langfuse import observe
         _generate_decorator = observe(as_type="generation")
-    except ImportError:
+    except (ImportError, Exception):
         def _generate_decorator(func):
             return func
 

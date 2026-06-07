@@ -1,0 +1,42 @@
+[
+  {
+    "id": "conf-001",
+    "title": "Architecture Decision Record: API Gateway Selection",
+    "space": "Engineering",
+    "author": "Mike Johnson",
+    "last_modified": "2025-11-16",
+    "content": "Architecture Decision Record: API Gateway Selection\n\nStatus: Accepted\nDate: 2025-11-15\nDeciders: John Smith, Sarah Chen, Mike Johnson\n\nContext:\nProject Atlas requires a centralized API gateway for routing, authentication, rate limiting, and monitoring. We evaluated three options:\n\n1. Kong (Open Source) - Self-managed, highly customizable\n2. AWS API Gateway - Managed service, tight AWS integration\n3. Nginx Plus - Proven performance, simpler configuration\n\nDecision:\nWe chose Kong because:\n- Flexibility for both cloud and on-premise deployment\n- Rich plugin ecosystem (OAuth, rate limiting, logging)\n- Active community and commercial support available\n- Better fit for our hybrid cloud strategy\n\nConsequences:\n- Team needs Kong expertise (training planned)\n- We manage the infrastructure ourselves\n- More control over configuration and customization\n- Can migrate to any cloud provider without lock-in"
+  },
+  {
+    "id": "conf-002",
+    "title": "Best Practices: Microservices Communication",
+    "space": "Engineering",
+    "author": "Sarah Chen",
+    "last_modified": "2025-11-22",
+    "content": "Best Practices: Microservices Communication\n\nSynchronous Communication:\n- Use REST APIs for request-response patterns\n- Always set timeouts (default: 5 seconds)\n- Implement circuit breakers for external calls\n- Use correlation IDs for distributed tracing\n\nAsynchronous Communication:\n- Use message queues (RabbitMQ/SQS) for fire-and-forget\n- Use event streaming (Kafka) for event-driven patterns\n- Ensure idempotent message processing\n- Implement dead letter queues for failed messages\n\nService Discovery:\n- Use Kubernetes DNS for internal service discovery\n- Kong upstream configuration for external routing\n- Health check endpoints required for all services\n\nError Handling:\n- Use standard error response format across all services\n- Include correlation ID in error responses\n- Log errors with structured logging (JSON format)\n- Never expose internal errors to external consumers\n\nSecurity:\n- mTLS for all service-to-service communication\n- OAuth tokens for user-facing APIs\n- API keys for third-party integrations\n- Network policies to restrict pod-to-pod communication"
+  },
+  {
+    "id": "conf-003",
+    "title": "Technical Documentation: OAuth 2.0 Implementation Guide",
+    "space": "Engineering",
+    "author": "Sarah Chen",
+    "last_modified": "2025-12-08",
+    "content": "OAuth 2.0 Implementation Guide\n\nOverview:\nThis guide covers the OAuth 2.0 implementation for Project Atlas, including setup, configuration, and integration instructions.\n\nToken Flow:\n1. Client requests authorization code via /auth/authorize\n2. User authenticates and grants consent\n3. Client exchanges code for tokens via /auth/token\n4. Access token used in Authorization header\n5. Refresh token used to get new access tokens\n\nToken Specifications:\n- Access Token: JWT, RSA-256 signed, 1-hour expiry\n- Refresh Token: Opaque, stored in Redis, 24-hour sliding expiry\n- ID Token: JWT with user claims\n\nScopes:\n- read: Read-only access to resources\n- write: Read-write access to resources\n- admin: Administrative operations\n- service: Service-to-service (Client Credentials only)\n\nIntegration Steps:\n1. Register your application in the OAuth admin console\n2. Configure redirect URIs\n3. Implement PKCE challenge generation\n4. Add token validation middleware to your service\n5. Handle token refresh in your HTTP client\n\nSecurity Considerations:\n- Always use HTTPS\n- Store tokens securely (HttpOnly cookies or secure storage)\n- Validate token signature and claims on every request\n- Implement token revocation for logout"
+  },
+  {
+    "id": "conf-004",
+    "title": "Kubernetes Cluster Management Guide",
+    "space": "DevOps",
+    "author": "Lisa Wang",
+    "last_modified": "2025-12-14",
+    "content": "Kubernetes Cluster Management Guide\n\nCluster Overview:\n- Provider: AWS EKS\n- Version: 1.28\n- Worker Nodes: 12 (m5.2xlarge)\n- Namespaces: production, staging, monitoring, system\n\nNode Management:\n- Auto-scaling: Min 8, Max 16 nodes\n- Node groups: general-purpose, memory-optimized\n- Spot instances for non-critical workloads\n\nDeployment Practices:\n- All deployments via ArgoCD (GitOps)\n- Helm charts for all applications\n- Rolling updates with maxUnavailable: 1\n- Readiness probes required for all pods\n\nMonitoring Stack:\n- Prometheus for metrics collection\n- Grafana for dashboards\n- Loki for log aggregation\n- Jaeger for distributed tracing\n\nDisaster Recovery:\n- Daily etcd snapshots to S3\n- Multi-AZ node distribution\n- Automated failover for stateful services\n- RTO: 30 minutes, RPO: 1 hour"
+  },
+  {
+    "id": "conf-005",
+    "title": "Incident Response Procedure",
+    "space": "DevOps",
+    "author": "Lisa Wang",
+    "last_modified": "2025-12-19",
+    "content": "Incident Response Procedure\n\nSeverity Levels:\n- P1 (Critical): Complete service outage, data loss risk\n- P2 (High): Major feature unavailable, significant degradation\n- P3 (Medium): Minor feature impact, workaround available\n- P4 (Low): Cosmetic issues, non-urgent improvements\n\nResponse Times:\n- P1: Acknowledge within 5 minutes, resolve within 1 hour\n- P2: Acknowledge within 15 minutes, resolve within 4 hours\n- P3: Acknowledge within 1 hour, resolve within 24 hours\n- P4: Acknowledge within 4 hours, resolve within 1 week\n\nIncident Workflow:\n1. Detection (monitoring alert or user report)\n2. Triage (determine severity and impact)\n3. Communication (notify stakeholders via #incidents)\n4. Investigation (identify root cause)\n5. Resolution (apply fix or workaround)\n6. Recovery (verify system stability)\n7. Post-mortem (document lessons learned)\n\nCommunication Templates:\n- Initial notification: '[P{level}] {title} - Impact: {description}'\n- Update: '[UPDATE] {title} - Status: {investigating/identified/fixing}'\n- Resolved: '[RESOLVED] {title} - Root cause: {cause}, Duration: {time}'"
+  }
+]

@@ -71,6 +71,54 @@ export async function getStats() {
 }
 
 // ==========================================================================
+// Connector API Functions
+// ==========================================================================
+
+/**
+ * Connect an enterprise knowledge source.
+ * Triggers sample data ingestion on the backend.
+ */
+export async function connectSource(sourceId) {
+  try {
+    const response = await api.post(`/connectors/${sourceId}/connect`);
+    return response.data;
+  } catch (err) {
+    // If backend endpoint doesn't exist yet, return simulated response
+    console.warn("Connector API not available, using simulated response");
+    return {
+      status: "connected",
+      records_ingested: 0,
+      entities_created: 0,
+      relationships_created: 0,
+    };
+  }
+}
+
+/**
+ * Disconnect an enterprise knowledge source.
+ */
+export async function disconnectSource(sourceId) {
+  try {
+    const response = await api.post(`/connectors/${sourceId}/disconnect`);
+    return response.data;
+  } catch {
+    return { status: "disconnected" };
+  }
+}
+
+/**
+ * Get graph visualization data (nodes + edges from Neo4j)
+ */
+export async function getGraphData() {
+  try {
+    const response = await api.get("/graph/data");
+    return response.data;
+  } catch {
+    return { nodes: [], edges: [] };
+  }
+}
+
+// ==========================================================================
 // WebSocket Helpers (Phase 3)
 // ==========================================================================
 

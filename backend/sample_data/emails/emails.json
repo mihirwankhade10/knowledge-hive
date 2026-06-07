@@ -1,0 +1,51 @@
+[
+  {
+    "id": "email-001",
+    "from": "Engineering Director",
+    "to": ["John Smith"],
+    "cc": ["VP Engineering"],
+    "timestamp": "2025-11-18T15:30:00Z",
+    "subject": "RE: Project Atlas Migration Initiative - APPROVED",
+    "content": "John,\n\nI've reviewed the migration initiative proposal for Project Atlas. After careful consideration of the risk assessment, timeline, and resource allocation, I'm approving this initiative.\n\nKey conditions:\n1. Blue-green deployment must be validated in staging before production cutover\n2. Rollback procedure must be tested and documented\n3. Weekly status updates to leadership team\n4. Go/no-go checkpoint at 50% completion\n\nBudget: Approved for Q4 allocation of $150,000 for additional infrastructure.\n\nPlease proceed with Phase 1 as outlined.\n\nBest regards,\nEngineering Director"
+  },
+  {
+    "id": "email-002",
+    "from": "John Smith",
+    "to": ["Engineering Director", "VP Engineering"],
+    "timestamp": "2025-12-06T10:00:00Z",
+    "subject": "Project Atlas - Week 1 Status Update",
+    "content": "Team,\n\nProject Atlas Week 1 Status:\n\nCompleted:\n- Kubernetes cluster expansion (6 new worker nodes)\n- Database migration scripts created and tested\n- API Gateway base configuration with Kong\n- CI/CD pipeline updates for new services\n\nIn Progress:\n- OAuth 2.0 integration (Sarah Chen - 60% complete)\n- Data migration dry-run (scheduled for Dec 10)\n- Load testing infrastructure setup\n\nRisks:\n- Third-party API rate limits need monitoring during migration\n- One team member (David Park) has PTO Dec 20-Jan 2\n\nNext Week:\n- Complete OAuth spec review\n- Begin staging deployment\n- Start integration testing\n\nOverall Status: ON TRACK\n\nBest,\nJohn Smith\nProject Atlas Lead"
+  },
+  {
+    "id": "email-003",
+    "from": "Sarah Chen",
+    "to": ["John Smith", "Mike Johnson"],
+    "timestamp": "2025-12-08T09:15:00Z",
+    "subject": "OAuth 2.0 Implementation Spec - Review Request",
+    "content": "Hi team,\n\nPlease review the attached OAuth 2.0 implementation specification for Project Atlas.\n\nKey decisions:\n- Using Authorization Code flow with PKCE for web applications\n- Client Credentials flow for service-to-service communication\n- Token refresh with sliding expiration (24 hours)\n- Scopes: read, write, admin, service\n- JWT tokens with RSA-256 signing\n\nIntegration points:\n1. API Gateway (Kong) - Token validation plugin\n2. User Service - Token issuance and refresh\n3. All microservices - Token verification middleware\n\nBreaking changes:\n- Old session-based auth will be deprecated after 30-day transition period\n- API key auth will remain for backward compatibility\n\nPlease provide feedback by December 12.\n\nThanks,\nSarah Chen"
+  },
+  {
+    "id": "email-004",
+    "from": "Lisa Wang",
+    "to": ["Engineering Director", "John Smith"],
+    "timestamp": "2025-12-13T14:00:00Z",
+    "subject": "Infrastructure Budget Request - Q1 Scaling",
+    "content": "Hi,\n\nBased on the migration load testing results, we need additional infrastructure for Q1:\n\n1. AWS EKS: 4 additional m5.2xlarge instances - $2,400/month\n2. RDS Multi-AZ upgrade for production database - $800/month\n3. ElastiCache Redis cluster for session management - $600/month\n4. CloudWatch enhanced monitoring - $200/month\n\nTotal additional monthly cost: $4,000/month ($12,000 for Q1)\n\nJustification:\n- Current cluster at 78% capacity during peak hours\n- Migration will temporarily run dual systems\n- Need headroom for Release 3.2 traffic increase\n\nPlease approve at your earliest convenience. We need to provision by Dec 20.\n\nThanks,\nLisa Wang\nDevOps Lead"
+  },
+  {
+    "id": "email-005",
+    "from": "Mike Johnson",
+    "to": ["John Smith", "Sarah Chen"],
+    "timestamp": "2025-12-15T16:45:00Z",
+    "subject": "API Gateway Architecture Review - Findings",
+    "content": "Team,\n\nCompleted the architecture review of the API Gateway setup. Key findings:\n\nPositive:\n- Kong configuration is clean and well-documented\n- Rate limiting working correctly at 1000 req/min per service\n- Health checks properly configured for all upstream services\n- SSL termination at gateway level reduces service complexity\n\nConcerns:\n1. No circuit breaker pattern implemented yet\n2. Request/response logging needs to be added for audit compliance\n3. CORS configuration too permissive for production\n4. Missing request validation for content-type headers\n\nRecommendations:\n- Add circuit breaker before production deployment\n- Implement structured logging with correlation IDs\n- Restrict CORS to specific allowed origins\n- Add content-type validation middleware\n\nETA for fixes: 5 business days.\n\nMike Johnson\nBackend Lead"
+  },
+  {
+    "id": "email-006",
+    "from": "VP Engineering",
+    "to": ["Engineering Director", "John Smith"],
+    "timestamp": "2025-12-20T11:00:00Z",
+    "subject": "RE: Project Atlas - Executive Briefing Summary",
+    "content": "Thank you for the executive briefing on Project Atlas.\n\nThe board is satisfied with the progress. Key takeaways:\n\n1. Timeline: On track for January 15 Release 3.2\n2. Budget: Within approved limits\n3. Risk: Acceptable with current mitigations\n\nAdditional direction:\n- Ensure zero-downtime deployment for the migration cutover\n- Prepare customer communication plan for any service changes\n- Schedule a demo for the board in January\n\nGreat work to the entire team.\n\nBest,\nVP Engineering"
+  }
+]

@@ -23,6 +23,8 @@ from backend.core.exceptions import register_exception_handlers, RateLimitExceed
 from backend.core.dependencies import shutdown_services, get_redis_service
 from backend.core.rate_limit import limiter
 from backend.api import upload, query, health
+from backend.api import connectors as connectors_api
+from backend.api import graph as graph_api
 from backend.api import websocket as ws_api
 
 # ---------------------------------------------------------------------------
@@ -128,6 +130,8 @@ def create_app() -> FastAPI:
     app.include_router(upload.router, prefix="/api", tags=["Upload"])
     app.include_router(query.router, prefix="/api", tags=["Query"])
     app.include_router(health.router, prefix="/api", tags=["Health"])
+    app.include_router(connectors_api.router, prefix="/api", tags=["Connectors"])
+    app.include_router(graph_api.router, prefix="/api", tags=["Graph"])
 
     # 8. Mount WebSocket router (Phase 3)
     app.include_router(ws_api.router, tags=["WebSocket"])

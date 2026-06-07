@@ -43,7 +43,7 @@ const AGENT_LABELS = {
   cache: { label: "Cache", icon: "⚡", color: "yellow" },
 };
 
-export default function ChatWindow() {
+export default function ChatWindow({ suggestedQueries = [] }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -193,14 +193,40 @@ export default function ChatWindow() {
       >
         {messages.length === 0 ? (
           <Flex h="100%" align="center" justify="center">
-            <VStack spacing={3} color="hive.textMuted">
+            <VStack spacing={4} color="hive.textMuted" maxW="500px">
               <Text fontSize="4xl">🐝</Text>
               <Text fontSize="lg" fontWeight="500">
-                Ask KnowledgeHive anything
+                Enterprise Knowledge Assistant
               </Text>
-              <Text fontSize="sm">
-                Upload documents first, then ask questions about your knowledge base
+              <Text fontSize="sm" textAlign="center">
+                Ask questions across all connected sources — Teams, Email, Jira, SharePoint, Confluence
               </Text>
+              {suggestedQueries.length > 0 && (
+                <Flex gap={2} flexWrap="wrap" justify="center" mt={2}>
+                  {suggestedQueries.slice(0, 4).map((q) => (
+                    <Box
+                      key={q}
+                      px={3}
+                      py={2}
+                      borderRadius="lg"
+                      bg="hive.surface"
+                      border="1px solid"
+                      borderColor="hive.border"
+                      fontSize="xs"
+                      cursor="pointer"
+                      _hover={{
+                        borderColor: "brand.500",
+                        bg: "hive.accentGlow",
+                        color: "hive.text",
+                      }}
+                      transition="all 0.2s"
+                      onClick={() => setInput(q)}
+                    >
+                      {q}
+                    </Box>
+                  ))}
+                </Flex>
+              )}
             </VStack>
           </Flex>
         ) : (
