@@ -114,11 +114,25 @@ services:
     networks:
       - knowledgehive
 
+  # --- Prometheus (Phase 4: Observability) ---
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    depends_on:
+      - backend
+    networks:
+      - knowledgehive
+
 volumes:
   qdrant_data:
   neo4j_data:
   neo4j_logs:
   redis_data:
+  prometheus_data:
 
 networks:
   knowledgehive:

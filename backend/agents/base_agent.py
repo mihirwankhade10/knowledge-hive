@@ -13,8 +13,16 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from backend.models.query import AgentStatus
+from prometheus_client import Histogram
 
 logger = logging.getLogger(__name__)
+
+# Prometheus metric for agent execution duration
+AGENT_DURATION = Histogram(
+    "agent_execution_duration_seconds",
+    "Time spent executing a swarm agent",
+    ["agent_name", "status"]
+)
 
 
 @dataclass
@@ -70,11 +78,13 @@ class BaseAgent(ABC):
             logger.info(
                 f"[{self.name}] Completed in {result.duration_ms}ms"
             )
+            AGENT_DURATION.labels(agent_name=self.name, status="completed").observe(duration / 1000.0)
             return result
 
         except Exception as e:
             duration = (time.time() - start_time) * 1000
             logger.error(f"[{self.name}] Failed: {e}")
+            AGENT_DURATION.labels(agent_name=self.name, status="failed").observe(duration / 1000.0)
             return AgentResult(
                 status=AgentStatus.FAILED,
                 output={},

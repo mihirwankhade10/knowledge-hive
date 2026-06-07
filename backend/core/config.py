@@ -88,10 +88,10 @@ class Settings(BaseSettings):
     celery_result_backend: str = Field(default="redis://localhost:6379/1", description="Celery result backend URL")
     celery_worker_concurrency: int = Field(default=2, description="Celery worker concurrency")
 
-    # --- Future: Langfuse ---
-    # langfuse_public_key: str = ""
-    # langfuse_secret_key: str = ""
-    # langfuse_host: str = "https://cloud.langfuse.com"
+    # --- Observability: Langfuse (Phase 4) ---
+    langfuse_public_key: str = Field(default="", description="Langfuse Public Key")
+    langfuse_secret_key: str = Field(default="", description="Langfuse Secret Key")
+    langfuse_host: str = Field(default="https://cloud.langfuse.com", description="Langfuse Host URL")
 
     model_config = {
         "env_file": ".env",

@@ -132,6 +132,15 @@ def create_app() -> FastAPI:
     # 8. Mount WebSocket router (Phase 3)
     app.include_router(ws_api.router, tags=["WebSocket"])
 
+    from prometheus_fastapi_instrumentator import Instrumentator
+
+    # 9. Observability (Phase 4): Prometheus Metrics
+    Instrumentator().instrument(app).expose(app, endpoint="/api/metrics", tags=["Observability"])
+
+    # 10. Observability (Phase 4): OpenTelemetry Tracing
+    from backend.core.telemetry import setup_telemetry
+    setup_telemetry(app)
+
     return app
 
 

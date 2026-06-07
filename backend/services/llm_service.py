@@ -13,10 +13,30 @@ from typing import Protocol, Optional, TYPE_CHECKING
 
 import httpx
 
-if TYPE_CHECKING:
-    from backend.services.cache import CacheManager
+from backend.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# --- Configure Langfuse Context (Optional) ---
+try:
+    from langfuse.decorators import langfuse_context
+    settings = get_settings()
+    if settings.langfuse_public_key and settings.langfuse_secret_key:
+        langfuse_context.configure(
+            public_key=settings.langfuse_public_key,
+            secret_key=settings.langfuse_secret_key,
+            host=settings.langfuse_host,
+        )
+        logger.info("Langfuse tracing enabled and configured.")
+    else:
+        logger.info("Langfuse keys not found. Tracing disabled.")
+except ImportError:
+    logger.warning("Langfuse package not installed. Tracing disabled.")
+except Exception as e:
+    logger.warning(f"Failed to configure Langfuse: {e}")
+
+if TYPE_CHECKING:
+    from backend.services.cache import CacheManager
 
 
 class LLMProvider(Protocol):
@@ -62,6 +82,15 @@ class OpenRouterProvider:
             )
         return self._client
 
+    # If Langfuse is available, wrap with observe
+    try:
+        from langfuse.decorators import observe
+        _generate_decorator = observe(as_type="generation")
+    except ImportError:
+        def _generate_decorator(func):
+            return func
+
+    @_generate_decorator
     async def generate(
         self,
         prompt: str,
@@ -113,6 +142,7 @@ class OpenRouterProvider:
             response.raise_for_status()
             data = response.json()
             result = data["choices"][0]["message"]["content"]
+            usage = data.get("usage", {})
 
             # --- Store in cache ---
             if use_cache and cache_key:
