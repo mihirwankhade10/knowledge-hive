@@ -75,9 +75,21 @@ jobs:
             sudo docker compose down
             sudo docker compose up -d --build
 
-            # Wait for services to be healthy
+            # Wait for services to be healthy (Neo4j needs ~45s)
             echo "⏳ Waiting for services to start..."
-            sleep 15
+            sleep 45
+
+            # Verify containers are actually running
+            echo "📋 Container status:"
+            sudo docker compose ps
+
+            # Fail deploy if any expected service exited
+            EXITED=$(sudo docker compose ps --status=exited --format json 2>/dev/null | grep -c '"Name"' || true)
+            if [ "$EXITED" -gt "0" ]; then
+              echo "❌ One or more containers exited unexpectedly. Logs:"
+              sudo docker compose logs --tail=50
+              exit 1
+            fi
 
             # Quick health check
             echo "🏥 Running health check..."
