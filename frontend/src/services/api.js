@@ -28,12 +28,20 @@ const api = axios.create({
  * Upload a document (PDF, DOCX, TXT)
  * Phase 3: Returns { task_id, document_id, status: "accepted" } when Celery is available
  */
-export async function uploadDocument(file, { sync = false } = {}) {
+export async function uploadDocument(file, { sync = false, onUploadProgress } = {}) {
   const formData = new FormData();
   formData.append("file", file);
 
   const response = await api.post(`/upload${sync ? "?sync=true" : ""}`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: onUploadProgress
+      ? (progressEvent) => {
+          const percent = progressEvent.total
+            ? Math.round((progressEvent.loaded / progressEvent.total) * 100)
+            : 0;
+          onUploadProgress(percent);
+        }
+      : undefined,
   });
   return response.data;
 }

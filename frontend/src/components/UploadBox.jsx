@@ -56,11 +56,17 @@ export default function UploadBox({ onUploadComplete }) {
   const wsRef = useRef(null);
   const toast = useToast();
 
-  // Cleanup WebSocket on unmount
+  // Ref for sync processing progress animation interval
+  const syncTimerRef = useRef(null);
+
+  // Cleanup WebSocket and sync timer on unmount
   useEffect(() => {
     return () => {
       if (wsRef.current) {
         wsRef.current.close();
+      }
+      if (syncTimerRef.current) {
+        clearInterval(syncTimerRef.current);
       }
     };
   }, []);
@@ -78,18 +84,30 @@ export default function UploadBox({ onUploadComplete }) {
       setStepMessage("Uploading file...");
 
       try {
-        const data = await uploadDocument(file);
+        // Upload with real HTTP progress tracking (mapped to 0–50%)
+        const data = await uploadDocument(file, {
+          onUploadProgress: (percent) => {
+            // Map HTTP upload progress to 0–50% of the total bar
+            const mapped = Math.round(percent * 0.5);
+            setProgress(mapped);
+            if (percent >= 100) {
+              setStepMessage("File uploaded. Processing...");
+            }
+          },
+        });
 
         // Phase 3: async upload — connect to WebSocket for progress
         if (data.task_id && data.status === "accepted") {
           setStepMessage("File accepted. Starting processing...");
-          setProgress(5);
+          setProgress(50);
 
           const { ws } = subscribeToTaskProgress(
             data.task_id,
-            // onProgress
+            // onProgress — map WS progress (0–100) to 50–100% of the bar
             (update) => {
-              setProgress(update.progress || 0);
+              const wsProgress = update.progress || 0;
+              const mapped = 50 + Math.round(wsProgress * 0.5);
+              setProgress(mapped);
               setCurrentStep(update.step || null);
               setStepMessage(update.message || "Processing...");
             },
@@ -120,7 +138,7 @@ export default function UploadBox({ onUploadComplete }) {
               const msg = errData.error || errData.message || "Processing failed";
               setError(msg);
               setUploading(false);
-              setProgress(0);
+              // Don't reset progress to 0 — leave it at last value
               toast({
                 title: "Processing Failed",
                 description: msg,
@@ -132,10 +150,13 @@ export default function UploadBox({ onUploadComplete }) {
           );
           wsRef.current = ws;
         } else {
-          // Sync mode fallback (Celery not available)
+          // ── Sync mode fallback (Celery not available) ──
+          // The HTTP request already completed (data is the final result).
+          // Show completion immediately.
           setResult(data);
           setUploading(false);
           setProgress(100);
+          setCurrentStep("done");
           toast({
             title: "Upload Successful",
             description: data.message || `${file.name} processed successfully`,
@@ -149,7 +170,7 @@ export default function UploadBox({ onUploadComplete }) {
         const msg = err.response?.data?.message || err.response?.data?.detail || err.message || "Upload failed";
         setError(msg);
         setUploading(false);
-        setProgress(0);
+        // Don't reset progress to 0 — leave it visible so user sees where it failed
         toast({
           title: "Upload Failed",
           description: msg,
