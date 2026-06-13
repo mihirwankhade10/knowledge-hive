@@ -40,7 +40,10 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://localhost:8000
+      # Set VITE_API_URL in your .env (ENV_FILE secret) to the VM's public IP,
+      # e.g. VITE_API_URL=http://20.x.x.x:8000 — the React app runs in the
+      # browser, so "localhost" would point at the viewer's machine, not the VM.
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
     restart: unless-stopped
     depends_on:
       - backend
