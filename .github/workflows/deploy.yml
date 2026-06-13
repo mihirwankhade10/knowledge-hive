@@ -72,8 +72,8 @@ jobs:
 
             # Rebuild and restart containers
             echo "🐳 Rebuilding Docker containers..."
-            docker compose down
-            docker compose up -d --build
+            sudo docker compose down
+            sudo docker compose up -d --build
 
             # Wait for services to be healthy
             echo "⏳ Waiting for services to start..."
