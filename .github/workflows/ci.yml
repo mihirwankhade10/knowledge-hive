@@ -54,7 +54,8 @@ jobs:
           echo "OPENROUTER_API_KEY=test-key-not-real" >> .env
           echo "QDRANT_HOST=localhost" >> .env
           echo "NEO4J_URI=bolt://localhost:7687" >> .env
-          echo "REDIS_URL=redis://localhost:6379" >> .env
+          echo "REDIS_HOST=localhost" >> .env
+          echo "REDIS_PORT=6379" >> .env
 
       - name: Run unit tests
         run: |
