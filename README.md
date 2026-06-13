@@ -230,16 +230,18 @@ The foundation of the KnowledgeHive swarm.
 - [x] Frontend WebSocket integration (live upload progress, live agent step indicators)
 - [x] Graceful fallback to synchronous mode when Celery is unavailable
 
-### Phase 4: Observability
-- [ ] Integrate Langfuse for LLM prompt tracing and cost monitoring
-- [ ] Export Prometheus metrics (Qdrant/Neo4j query times, Agent durations)
-- [ ] OpenTelemetry for distributed tracing across the backend
+### Phase 4: Observability (✅ Completed)
+- [x] Integrate Langfuse for LLM prompt tracing and cost monitoring
+- [x] Export Prometheus metrics (Qdrant/Neo4j query times, Agent durations)
+- [x] OpenTelemetry for distributed tracing across the backend
 
-### Phase 5: Production
-- [ ] Kubernetes (K8s) deployment manifests (Deployments, Services, Ingress)
-- [ ] Horizontal Pod Autoscaling (HPA) for backend API and Celery workers
-- [ ] Migration from local SentenceTransformers to a dedicated Embedding API (or Triton Inference Server)
-- [ ] CI/CD pipelines (GitHub Actions) for automated testing and Docker publishing
+### Phase 5: Production (✅ Completed)
+- [x] Azure VM deployment (Docker Compose production setup)
+- [x] CI/CD pipelines (GitHub Actions) for automated testing and Docker builds
+- [x] Auto-deploy to Azure VM on push to main branch
+- [ ] _(Future)_ Kubernetes (K8s) deployment manifests for multi-node scaling
+- [ ] _(Future)_ Horizontal Pod Autoscaling (HPA) for backend API and Celery workers
+- [ ] _(Future)_ Migration from local SentenceTransformers to a dedicated Embedding API
 
 ## 📄 License
 

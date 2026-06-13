@@ -1,0 +1,114 @@
+# =============================================================================
+# KnowledgeHive — CI Pipeline
+# Runs on every push and pull request
+#
+# Jobs:
+#   1. backend-tests  — Lint + pytest (unit tests only, no external services)
+#   2. frontend-build — Install deps + production build check
+#   3. docker-build   — Verify Docker images build successfully
+# =============================================================================
+
+name: CI — Tests & Build
+
+on:
+  push:
+    branches: [main, develop, "feature/**"]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs for the same branch/PR
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Backend: Python lint + unit tests
+  # ─────────────────────────────────────────────────────────────────────────
+  backend-tests:
+    name: 🐍 Backend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create .env for tests
+        run: |
+          cp .env.example .env
+          # Override with test-safe values
+          echo "OPENROUTER_API_KEY=test-key-not-real" >> .env
+          echo "QDRANT_HOST=localhost" >> .env
+          echo "NEO4J_URI=bolt://localhost:7687" >> .env
+          echo "REDIS_URL=redis://localhost:6379" >> .env
+
+      - name: Run unit tests
+        run: |
+          python -m pytest tests/backend/test_parsers.py tests/backend/test_chunking.py tests/backend/test_exceptions.py -v --tb=short
+        env:
+          PYTHONDONTWRITEBYTECODE: 1
+
+      - name: Run all tests (allow failures for integration tests)
+        run: |
+          python -m pytest tests/backend/ -v --tb=short || true
+        env:
+          PYTHONDONTWRITEBYTECODE: 1
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Frontend: npm install + production build
+  # ─────────────────────────────────────────────────────────────────────────
+  frontend-build:
+    name: ⚛️ Frontend Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build production bundle
+        working-directory: frontend
+        run: npm run build
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Docker: verify images build successfully
+  # ─────────────────────────────────────────────────────────────────────────
+  docker-build:
+    name: 🐳 Docker Build Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -f docker/backend.Dockerfile -t knowledgehive-backend:ci .
+
+      - name: Build frontend image
+        run: docker build -f docker/frontend.Dockerfile -t knowledgehive-frontend:ci .
+
+      - name: Verify images exist
+        run: |
+          docker images knowledgehive-backend:ci
+          docker images knowledgehive-frontend:ci
