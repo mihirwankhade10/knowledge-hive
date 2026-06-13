@@ -73,6 +73,17 @@ jobs:
             # Rebuild and restart containers
             echo "🐳 Rebuilding Docker containers..."
             sudo docker compose down
+
+            # Free disk space: remove dangling images and stale build cache
+            # left over from previous builds (prevents "no space left on device").
+            echo "🧹 Cleaning up old Docker images and build cache..."
+            echo "Disk before cleanup:"
+            df -h / | tail -1
+            sudo docker image prune -f
+            sudo docker builder prune -f
+            echo "Disk after cleanup:"
+            df -h / | tail -1
+
             sudo docker compose up -d --build
 
             # Wait for services to be healthy (Neo4j needs ~45s)
